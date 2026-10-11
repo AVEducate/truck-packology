@@ -550,6 +550,7 @@ body.phone .modal-back{padding:10px}
 .lvl{height:136px;overflow:hidden;background:var(--panel2);border:2px solid #0d0d0c;font-family:var(--pixel);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:4px;text-align:center}
 .lvl.boss{border-color:var(--bad);box-shadow:inset 0 0 0 2px rgba(232,96,74,.35)} .lvl.boss .tag{color:var(--bad)} /* every tenth level: a bigger, maxed-out load */
 .lvl b{font-size:34px;font-weight:800}
+.lvl.bonusr{border-color:#f0c04a} .lvl.bonusr b{color:#f0c04a} .lvl.bonusr .tag{background:#f0c04a;color:#1a1209}
 .lvl.night{background:#14161f;border-color:#3a3f5c} .lvl.night b{color:#c9d2ff} .lvl.night .tag{background:#3a3f5c;color:#e6e9ff}
 .lvl small{font-size:12px;font-weight:700;color:var(--cream-dim);line-height:1.2;height:2.4em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .lvl .tag{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--accent);height:14px;line-height:14px}
@@ -3147,7 +3148,27 @@ const BONUS_NIGHT = EX({
   hint:'Cable trunks + utility trunks across the nose, bar it. A big trunk and two utility trunks, with utility trunks on the big trunk and the two hard cases on the utility trunks. Distros with utility trunks close the pocket. Strap every tier.',
   solution:[...NOSE(B2('cable_trunk'), [A4('utility_trunk')]), ...TIER(5, [['big_trunk', 0], ['utility_trunk', 8], ['utility_trunk', 12]], [[['utility_trunk', 0], ['utility_trunk', 4], ['hard_l', 8], ['hard_l', 12]]]), ...TIER(10, A4('distro'), [A4('utility_trunk')])]
 });
-LEVELS.push(BONUS_NIGHT); BONUS_NIGHT.id = 102;
+LEVELS.push(BONUS_NIGHT); BONUS_NIGHT.id = 102; BONUS_NIGHT.after = 90;
+// Three more bonus rounds (Omar 2026-10-10), kept simple, one at the end of each tier. Bonus stars count toward the Final Exam:
+// every 3 bonus stars stand in for one level that isn't mastered yet.
+const BONUS_RUSH = {title:'Rush Hour', bonus:true, night:true, after:30, clock:180, focus:'space', truck:{name:'Box truck · 10 ft bay · the driver leaves in 3 minutes', width:96, depth:120},
+  cases:[{type:'big_trunk', count:4},{type:'utility_trunk', count:8}], unloadSequence:null, rules:{heavyBase:false}, availableLoadBars:0, availableStraps:0, timer:null,
+  lesson:'<b>Rush hour, lights out.</b> It\'s dark, and the driver has to leave in <b>3 minutes</b>. Only the case you\'re carrying has light around it. Twelve trunks, a 10 ft bay: build each row wall to wall and keep moving. If the clock runs out, the truck leaves without you and you start again.',
+  objectives:['Load all 12 trunks', 'Beat the 3-minute clock', 'Every row wall to wall'],
+  hint:'Two large trunks across the nose, four utility trunks behind them, then the same again.',
+  solution:[['big_trunk',0,0],['big_trunk',8,0],['utility_trunk',0,5],['utility_trunk',4,5],['utility_trunk',8,5],['utility_trunk',12,5],['big_trunk',0,10],['big_trunk',8,10],['utility_trunk',0,15],['utility_trunk',4,15],['utility_trunk',8,15],['utility_trunk',12,15]]};
+const BONUS_RAIN = EX({title:'Rain Delay', bonus:true, night:true, after:60, slip:true, focus:'space', truck:STACK_TRUCK(120, 'Box truck · 10 ft bay · 96" tall inside · wet floor'),
+  cases:[{type:'big_trunk', count:2},{type:'utility_trunk', count:8},{type:'distro', count:4}], availableStraps:3,
+  lesson:'<b>Rain delay, lights out.</b> It\'s dark, the load-out ran in the rain and the truck floor is wet. A case set down on the floor <b>slides toward the nose</b> until it touches something. Use it: let the floor push each row in tight.',
+  objectives:['Load all 14 cases', 'Two tiers, wall to wall', 'Bar the nose, strap the tiers'],
+  hint:'Two large trunks across the nose with four utility trunks on top; bar it. Four distros with four utility trunks on top; strap it.',
+  solution:[...NOSE(B2('big_trunk'), [A4('utility_trunk')]), ...TIER(5, A4('distro'), [A4('utility_trunk')])]});
+const BONUS_QUICK = OFF(STACK_LEVELS[0], {title:'Quick Unload', bonus:true, night:true, after:100,
+  lesson:'<b>Quick unload, lights out.</b> A small truck at the last venue, in the dark: the light follows your pointer, so search for the case you can reach. Empty it the right way: top cases first, take each bar and strap out as you reach it.',
+  objectives:['Empty the truck', 'Top cases first', 'Bars and straps out as you reach them'],
+  hint:'Take the strap out first, then the top trunks, then the bar, then the bottom row.'});
+LEVELS.push(BONUS_RUSH, BONUS_RAIN, BONUS_QUICK); BONUS_RUSH.id = 103; BONUS_RAIN.id = 104; BONUS_QUICK.id = 105;
+const BONUSES = [BONUS_RUSH, BONUS_RAIN, BONUS_NIGHT, BONUS_QUICK]; // in tier order: after 30, 60, 90, 100
 // slope levels (Omar 2026-10-08, from a real load-in on an incline): the truck is parked on a 30% grade, nose uphill, so cases on
 // wheels roll slowly back toward the doors until a load bar or strap stops them. Existing levels only, spread out after the strap lesson.
 const SLOPE_LEVELS = ['Corporate Gig', 'Lighting Day', 'LED Wall', 'Second Leg', 'Side Stage', 'The Bigger Pack'];
@@ -4276,7 +4297,7 @@ function closeModals(){ for (const m of document.querySelectorAll('.modal-back')
 
 /* ---------- level lifecycle ---------- */
 function loadLevel(idx){  const lv = LEVELS[idx]; if (lv && lv.exam){ if (examReady(G.progress)) openExam(); else openLevels(); return; } loadLevelObj(lv, idx); }
-function loadLevelObj(lv, idx){ NIGHT_MUSIC.stop();
+function loadLevelObj(lv, idx){ NIGHT_MUSIC.stop(); clockStop();
   G.crewOff = false; G.warnSeen = {}; G.coachPeek = 0; G.rehandles = 0; G.lastPlaced = null; // the crew comes back on every new level
   G.levelIdx = idx; G.level = lv;
   G.items = new Map(); let n = 0;
@@ -4295,7 +4316,7 @@ function loadLevelObj(lv, idx){ NIGHT_MUSIC.stop();
 }
 function showBriefing(){
   const lv = G.level; if (!lv){ openLevels(); return; }
-  $('brKicker').textContent = lv.demo ? 'PRACTICE BAY · NO SCORE · NOTHING SAVED' : lv.bonus ? 'BONUS LEVEL · AFTER THE EXPERT FINAL · STACKED LOAD · LIGHTS OUT' : `LEVEL ${lv.id} OF 101 · ${tierOf(lv.id).name} · ${lv.boss ? 'BOSS LOAD' : lv.practice ? 'PRACTICE' : lv.stacked ? 'STACKED LOAD' : 'FLOOR LOAD'}`;
+  $('brKicker').textContent = lv.demo ? 'PRACTICE BAY · NO SCORE · NOTHING SAVED' : lv.bonus ? `BONUS LEVEL · AFTER LEVEL ${lv.after} · ${lv.offload ? 'UNLOAD' : lv.stacked ? 'STACKED LOAD' : 'FLOOR LOAD'}${lv.clock ? ' · AGAINST THE CLOCK' : ''}${lv.slip ? ' · WET FLOOR' : ''} · LIGHTS OUT` : `LEVEL ${lv.id} OF 101 · ${tierOf(lv.id).name} · ${lv.boss ? 'BOSS LOAD' : lv.practice ? 'PRACTICE' : lv.stacked ? 'STACKED LOAD' : 'FLOOR LOAD'}`;
   $('brTitle').textContent = lv.title;
   let h = `<p>${lv.lesson}</p>`;
   h += `<div class="truck-spec">TRUCK: ${lv.truck.name.toUpperCase()} · ${lv.truck.width}" WIDE × ${lv.truck.depth}" DEEP (${fmtLen(lv.truck.depth)})</div>`;
@@ -4510,7 +4531,7 @@ function renderAbilityList(){
 }
 $('abList').addEventListener('click', e => { const b = e.target.closest('[data-ab]'); if (b){ closeModals(); showAbility(b.dataset.ab); } });
 $('abGo').onclick = closeAbility;
-function startPlay(){ closeModals(); if (G.level && G.level.night) NIGHT_MUSIC.start(); else NIGHT_MUSIC.stop(); if (G.level && !G.level.loop) sfx('beeper'); /* the truck backs in */ if (G.level && G.level.id && !G.level.demo) stat('level_start', {level:G.level.id}); G.mode = 'play'; G.coachShowUntil = performance.now() + COACH_LESSON_MS; G.coachFirst = true; G.warnSeen = {}; refresh(); }
+function startPlay(){ closeModals(); clockStop(); if (G.level && G.level.clock) clockStart(); if (G.level && G.level.night) NIGHT_MUSIC.start(); else NIGHT_MUSIC.stop(); if (G.level && !G.level.loop) sfx('beeper'); /* the truck backs in */ if (G.level && G.level.id && !G.level.demo) stat('level_start', {level:G.level.id}); G.mode = 'play'; G.coachShowUntil = performance.now() + COACH_LESSON_MS; G.coachFirst = true; G.warnSeen = {}; refresh(); }
 
 /* ---------- layout + rendering ---------- */
 const PHONE_RESERVE = 124; // phone: the button row + READY under the truck
@@ -4668,9 +4689,11 @@ function render(){
     let cx = ox + Wp / 2, cy = oy + cell * 4, r = Wp * .4;
     if (G.hand && G.ghost){ const {w, d} = Engine.dimsOf(itemOf(G.hand.uid).def, G.hand.rot); cx = ox + (G.ghost.x + w / 2) * cell; cy = oy + (G.ghost.y + d / 2) * cell; r = Math.min(Wp * .46, Math.max(w, d) * cell * .75 + cell * 4); }
     else if (G.tool && G.tool.L != null){ cy = oy + G.tool.L * cell; r = Wp * .42; }
+    else if (G.level.offload && G.nightPt){ cx = G.nightPt.x; cy = G.nightPt.y; r = cell * 7; } // unloading: the light follows your pointer
     else r = 0; // Omar 2026-10-10: between cases the light goes off; it comes back when you pick up the next case
     nightDark(ctx, cx, cy, r, currentPositions().map(p => { const {w, d} = Engine.dimsOf(itemOf(p.uid).def, p.rot); return [ox + p.x * cell, oy + p.y * cell, w * cell, d * cell]; }));
   }
+  clockLabel(ctx, ox + Wp + wall, oy - wall - 14);
   // ghost (case in hand)
   if (G.hand && G.ghost){
     const g = G.ghost;
@@ -4945,9 +4968,11 @@ function renderDoor(ctx){
     const lit = (x, z, w, h) => { cx = ox + (x + w / 2) * cell; cy = floorY - (z + h / 2) * cell; r = Math.min(Wp * .46, Math.max(w, h) * cell * .75 + cell * 4); };
     if (G.hand && G.ghost){ const def = itemOf(G.hand.uid).def, {w} = Engine.dimsOf(def, G.hand.rot); lit(G.ghost.x, G.ghost.z || 0, w, Engine.hOf(def, G.hand.rot)); }
     else if (G.tool && G.tool.L != null){ cy = floorY - Hp * (G.tool.tier === 'high' ? .6 : .25); }
+    else if (G.level.offload && G.nightPt){ cx = G.nightPt.x; cy = G.nightPt.y; r = cell * 7; }
     else r = 0; // lights out between cases
     nightDark(ctx, cx, cy, r, pos.map(o => [ox + o.p.x * cell, floorY - (o.r.z + o.r.h) * cell, o.r.w * cell, o.r.h * cell]));
   }
+  clockLabel(ctx, ox + Wp, top - 12);
   if (G.tool && G.tool.L != null){ // the tool ghost floats in front so you can always see where it will go
     const t = G.tool; drawDoorDevice({kind:t.kind, y:t.L, tier:t.tier}, {alpha:.9, outline:t.ok ? '#8fcf6a' : '#e8604a', dash:!t.ok});
     ctx.fillStyle = t.ok ? '#ebe3cb' : '#e8604a'; ctx.font = "800 19px 'Barlow Condensed', sans-serif"; ctx.textAlign = 'center';
@@ -5269,7 +5294,7 @@ const CREW = {chief:'CREW CHIEF', stagehand:'LEAD STAGEHAND', rigger:'RIGGER', d
 function crewFor(lv){
   if (!lv || lv.demo) return 'chief';
   if (lv.loop) return G.loop && G.loop.loadIn ? 'docklead' : 'chief';
-  const id = +lv.id || 0; if (lv.night) return 'rigger';
+  const id = +lv.id || 0; if (lv.bonus) return {30:'chief', 60:'stagehand', 90:'rigger', 100:'docklead'}[lv.after] || 'chief';
   return id > 100 ? 'chief' : id > 90 ? 'docklead' : id > 60 ? 'rigger' : id > 30 ? 'stagehand' : 'chief';
 }
 const crewCache = {};
@@ -5680,6 +5705,9 @@ function placeHand(){
   G.lastPlaced = h.stack ? null : h.uid;
   if (h.stack) G.placements.push(...Engine.stackPlacements(state(), h.stack, g.x, g.y));
   else G.placements.push({uid:h.uid, x:g.x, y:g.y, z:g.z || 0, rot:h.rot});
+  if (G.level.slip && !h.stack && !(g.z > 0)){ const p = G.placements[G.placements.length - 1]; let y = p.y; // wet floor (Rain Delay)
+    while (y > 0){ const r = Engine.canPlaceCase(state(), h.uid, p.x, y - 1, h.rot); if (!r.ok || (r.z || 0) > 0) break; y--; }
+    if (y !== p.y){ p.y = y; g.y = y; setTimeout(() => flashCoach('tip', 'Wet floor: it slid toward the nose until it touched something.', 2500), 0); } }
   const {w, d} = Engine.dimsOf(itemOf(h.uid).def, h.rot);
   const warn = g.warn;
   G.hand = null; G.ghost = null; G.lastInfo = h.uid; G.lastPlaced = h.uid; if (G.slide) delete G.slide[h.uid]; // ROTATE (phone) turns this one next; a case set down starts a fresh roll
@@ -6276,12 +6304,12 @@ function showResults(rep){
     ${rep.badges.length ? `<div class="badges">${rep.badges.map(b => `<span class="badge">${b}</span>`).join('')}</div>` : ''}
     <div class="section-label">WHAT THE CREW SAYS</div>
     <ul class="feedback">${rep.feedback.map(([k, t]) => `<li class="${k}">${t}</li>`).join('')}</ul>`;
-  const next = lv.bonus ? 90 : G.levelIdx + 1; // after the bonus, back on track at level 91
+  const next = lv.bonus ? lv.after : G.levelIdx + 1; // after a bonus, back on track at the next tier
   $('rsNext').disabled = !(next < LEVELS.length && prog.unlocked >= LEVELS[next].id);
   $('rsBetter').hidden = !!(lv.offload || lv.loop || !lv.solution || !lv.solution.length);
   if ($('rsSave')) $('rsSave').onclick = () => openAccount('start');
   stat('level_end', {level:lv.id, score:rep.total, stars, rehandles:rep.rehandles, passed});
-  NIGHT_MUSIC.stop();
+  NIGHT_MUSIC.stop(); clockStop();
   if (!passed && !rep.noStart) setTimeout(() => sfx('fail'), 150); // no level-complete sound: the truck ends the level, the stars are the reward. A won't-start already said it.
   $('rsNext').textContent = next < LEVELS.length ? 'NEXT LEVEL' : 'STACKED LEVELS SOON';
   showAchievements(newAchievements(ach0), () => { G.mode = 'results'; openModal('results'); fillStars(); });
@@ -6799,12 +6827,12 @@ function openLevels(){
   let h = '';
   for (let i = 1; i <= 101; i++){
     const tier = TIERS.find(t => t.from === i);
-    if (i === 91){ const bi = LEVELS.indexOf(BONUS_NIGHT), bopen = prog.unlocked > 90; // after the Expert Final
-      h += `<button class="lvl night" ${bopen ? `data-i="${bi}"` : 'disabled'}><b>☾</b><span class="tag">BONUS</span><small>${BONUS_NIGHT.title}</small><span class="st">${starRow(levelStars(prog, BONUS_NIGHT.id), '☆')}</span></button>`; }
+    for (const B of BONUSES) if (i === B.after + 1){ const bi = LEVELS.indexOf(B), bopen = prog.unlocked > B.after; // a bonus round closes each tier
+      h += `<button class="lvl ${B.night ? 'night' : 'bonusr'}" ${bopen ? `data-i="${bi}"` : 'disabled'}><b>${B.clock ? '⏱' : B.slip ? '☂' : B.offload ? '⇥' : '☾'}</b><span class="tag">BONUS</span><small>${B.title}</small><span class="st">${starRow(levelStars(prog, B.id), '☆')}</span></button>`; }
     if (i === 1) h += `<div class="mode-head">CAMPAIGN<small>Levels 1–100 + the final exam</small></div>`;
     if (tier) h += `${i > 1 ? '</div>' : ''}<div class="tier-head">${tier.name}<small>${tier.from === tier.to ? `Level ${tier.from}` : `Levels ${tier.from}–${tier.to}`} · ${tier.note}</small></div><div class="levels-grid">`;
     const lv = LEVELS[i - 1], open = lv && prog.unlocked >= i && (i < 101 || examReady(prog)), st = levelStars(prog, i);
-    if (i === 101){ h += `<button class="lvl" ${open ? `data-i="${i - 1}"` : 'disabled'}><b>${i}</b><span class="tag">FINAL EXAM</span><small>3★ or 95%+ on all 100 levels</small><span class="st">${masteredCount(prog)}/100</span></button>`; continue; }
+    if (i === 101){ h += `<button class="lvl" ${open ? `data-i="${i - 1}"` : 'disabled'}><b>${i}</b><span class="tag">FINAL EXAM</span><small>3★ or 95%+ on all 100 levels (3 bonus stars = 1 level)</small><span class="st">${masteredCount(prog)}/100${bonusLevels(prog) ? ` +${bonusLevels(prog)}` : ''}</span></button>`; continue; }
     h += `<button class="lvl${lv && lv.boss ? ' boss' : ''}" ${open ? `data-i="${i - 1}"` : 'disabled'}><b>${i}</b><span class="tag">${lv ? (lv.boss ? 'BOSS LOAD' : lv.practice ? 'PRACTICE' : 'LESSON') : ''}</span><small>${lv ? lv.title : 'COMING SOON'}</small><span class="st">${lv ? starRow(st, '☆') : '&nbsp;'}</span></button>`;
   }
   const lo = loopOpen(prog);
@@ -6977,9 +7005,11 @@ let homeBusy = false;
 // Level 101 (the final exam) opens only when every level 1-100 has 3 stars or a best score of 95%+.
 const isMastered = (prog, i) => (prog.stars[i] || 0) >= 3 || ((prog.bonus || {})[i] || 0) >= 3 || (prog.best[i] || 0) >= 95; // old stars still count
 const masteredCount = prog => { let n = 0; for (let i = 1; i <= 100; i++) if (isMastered(prog, i)) n++; return n; };
-const examReady = prog => masteredCount(prog) === 100;
+const bonusStars = prog => BONUSES.reduce((n, B) => n + ((prog.bonus || {})[B.id] || 0), 0);
+const bonusLevels = prog => Math.min(100 - masteredCount(prog), Math.floor(bonusStars(prog) / 3)); // every 3 bonus stars = one level (Omar 2026-10-10)
+const examReady = prog => masteredCount(prog) + bonusLevels(prog) >= 100;
 const nextLevelIdx = () => Math.min(LEVELS.length - 1, Math.max(0, (G.progress.unlocked || 1) - 1));
-function enterHome(){ NIGHT_MUSIC.stop();
+function enterHome(){ NIGHT_MUSIC.stop(); clockStop();
   homeBusy = false; leaveTour();
   const nx = nextLevelIdx(), home = LEVELS[nx] && LEVELS[nx].exam ? nx - 1 : nx; // past level 100: put level 100 behind the title, not the exam
   G.quietLoad = true; try { loadLevel(home); } finally { G.quietLoad = false; } // loaded behind the title: don't use up its how-to or ability slide
@@ -7221,6 +7251,16 @@ function stop(){ clearInterval(timer); timer = 0; if (bus){ const b = bus; bus =
 return {start, stop, playing:() => !!timer, setTrack:t => { track = t === 'folk' ? 'folk' : t === 'night' ? 'night' : 'tight'; }};
 })();
 
+// RUSH HOUR's clock: counts down while you load; the truck leaving stops it. If it runs out, the driver leaves and the level starts over.
+const CLOCK = {end:0, t:0};
+function clockStart(){ CLOCK.end = performance.now() + G.level.clock * 1000; CLOCK.t = setInterval(() => {
+  if (!G.level || !G.level.clock){ clockStop(); return; } if (G.mode === 'transit' || G.mode === 'results'){ clockStop(); return; }
+  if (G.mode === 'play' && clockLeft() <= 0){ clockStop(); sfx('fail'); flashCoach('bad', "<b>Time's up.</b> The driver couldn't wait and left. Same trucks again: a little faster this time.", 4000); setTimeout(() => { if (G.level && G.level.clock) loadLevel(G.levelIdx); }, 2200); }
+  render(); }, 250); }
+function clockStop(){ clearInterval(CLOCK.t); CLOCK.t = 0; }
+const clockLeft = () => Math.max(0, (CLOCK.end - performance.now()) / 1000);
+function clockLabel(ctx, x, y){ if (!G.level || !G.level.clock || !CLOCK.t) return; const t = Math.ceil(clockLeft()), m = Math.floor(t / 60), sec = String(t % 60).padStart(2, '0');
+  ctx.save(); ctx.font = "800 22px 'Barlow Condensed', sans-serif"; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = t <= 30 ? '#e8604a' : '#f0c04a'; ctx.fillText(`⏱ ${m}:${sec}`, x, y); ctx.restore(); } // short, so it never runs into the NOSE label
 // The Late Load-Out's music: Night Shift on the Classic player, only while that level is being played
 const NIGHT_MUSIC = { on:false, start(){ if (this.on || !G.level || !G.level.night) return; this.on = true; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('night'); CLASSIC_MUSIC.start(() => 1); },
   stop(){ if (!this.on) return; this.on = false; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('tight'); } };
@@ -7325,7 +7365,7 @@ function clFinishClear(){
   const A = Math.min(...band.map(p => p.r)), B = Math.max(...band.map(p => p.r + p.h));
   CL.placed = CL.placed.filter(p => !band.includes(p)); for (const p of CL.placed) if (p.r >= B) p.r -= B - A; // the load behind moves up as one block, its gaps intact
   CL.lines++; CL.streak = (CL.streak || 0) + 1;
-  CL.score += 100 * CL.level * CL.streak; // back-to-back rows from one case score more
+  CL.score += 100; // every row is 100 points: two rows 200, three rows 300 (Omar 2026-10-10)
   const lvl = 1 + Math.floor(CL.lines / 6); if (lvl > CL.level){ CL.level = lvl; clToast('LEVEL ' + lvl, 'Cases roll in faster'); }
   if (!clSettle()){ CL.streak = 0; if (!CL.active) clNextCase(); }
   clHud();
@@ -7511,7 +7551,10 @@ const clUp = e => {
   if (d && d.id === e.pointerId){ CL.drag = null; if (clFree(d.c, d.r, d.p.w, d.p.h, d.p)){ d.p.c = d.c; d.p.r = d.r; clRollForward(d.p); sfx('place'); if (!CL.clearing) clSettle(); } else sfx('bad'); clDraw(); return; }
   if (CL.swipe && CL.swipe.id === e.pointerId) CL.swipe = null;
 };
-$('clCanvas').addEventListener('pointerup', clUp); $('clCanvas').addEventListener('pointercancel', () => { CL.drag = null; CL.swipe = null; CL.scrub = null; });
+$('clCanvas').addEventListener('pointerup', clUp);
+// unloading in the dark: remember where the pointer / finger is so the light can follow it
+for (const ev of ['pointermove', 'pointerdown']) $('truckCanvas').addEventListener(ev, e => { if (!nightOn() || !G.level.offload) return; const r = $('truckCanvas').getBoundingClientRect(); G.nightPt = {x:e.clientX - r.left, y:e.clientY - r.top}; render(); });
+$('truckCanvas').addEventListener('pointerleave', () => { if (G.nightPt){ G.nightPt = null; render(); } }); $('clCanvas').addEventListener('pointercancel', () => { CL.drag = null; CL.swipe = null; CL.scrub = null; });
 // phone pad: hold ◀ ▶ to keep moving, hold FASTER to roll it in quicker
 const clHold = (id, down, up) => { const b = $(id); let t = 0; const stop = () => { clearInterval(t); t = 0; if (up) up(); };
   b.addEventListener('pointerdown', e => { e.preventDefault(); down(); if (!up) t = setInterval(down, 110); }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop); };
