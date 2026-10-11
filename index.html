@@ -550,6 +550,7 @@ body.phone .modal-back{padding:10px}
 .lvl{height:136px;overflow:hidden;background:var(--panel2);border:2px solid #0d0d0c;font-family:var(--pixel);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;padding:4px;text-align:center}
 .lvl.boss{border-color:var(--bad);box-shadow:inset 0 0 0 2px rgba(232,96,74,.35)} .lvl.boss .tag{color:var(--bad)} /* every tenth level: a bigger, maxed-out load */
 .lvl b{font-size:34px;font-weight:800}
+.lvl.night{background:#14161f;border-color:#3a3f5c} .lvl.night b{color:#c9d2ff} .lvl.night .tag{background:#3a3f5c;color:#e6e9ff}
 .lvl small{font-size:12px;font-weight:700;color:var(--cream-dim);line-height:1.2;height:2.4em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .lvl .tag{font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--accent);height:14px;line-height:14px}
 .lvl .st{color:var(--warn);font-size:14px;margin-top:2px}
@@ -932,9 +933,9 @@ const ABILITY_INFO = {
   dock:   {level:33, title:'DOCK STACK',
            phone:'Unlocked at level 33. From here on, you can build a stack on the dock: drag cases onto the DOCK STACK card, then drag the card into the truck.',
            desktop:'Unlocked at level 33. From here on, you can build a stack on the dock: ADD TO STACK, then PICK UP STACK and place it in one piece.'},
-  pocket: {level:62, title:'HARD CASES IN POCKETS',
-           phone:'Unlocked at level 62. From here on, small hard cases can ride on the lids: drag one into a pocket and let the next row close it in.',
-           desktop:'Unlocked at level 62. From here on, small hard cases can ride on the lids: drop one into a pocket and let the next row close it in.'},
+  pocket: {level:65, title:'HARD CASES IN POCKETS',
+           phone:'Unlocked at level 65. From here on, small hard cases can ride on the lids: drag one into a pocket and let the next row close it in.',
+           desktop:'Unlocked at level 65. From here on, small hard cases can ride on the lids: drop one into a pocket and let the next row close it in.'},
   pin:    {level:79, title:'PIN THE TIERS',
            phone:'Unlocked at level 79. From here on, you can pin tiers together: lay a long case across the line between two tiers.',
            desktop:'Unlocked at level 79. From here on, you can pin tiers together: lay a long case across the line between two tiers.'},
@@ -3135,6 +3136,18 @@ const EXAM = [
   ['Truss carts run the full length along both walls. How do you stack the nose?', ['Bar the nose tier first, as usual', 'Build the nose stack on the dock and roll it in finished, because there\'s no tier face to bar', 'Don\'t stack at all', 'Stack on the truss carts'], 1, 'With no tier face for a bar, the nose stack is built on the dock.']
 ];
 LEVELS.forEach((lv, i) => { lv.id = i + 1; });
+// BONUS (Omar 2026-10-10): LATE LOAD-OUT. The show's over, it's late, the dock lights are off. A light follows the case you're moving;
+// everything else is dim outlines, so you work from memory. Listed right after level 90; stored as level 102 so nothing renumbers.
+const BONUS_NIGHT = EX({
+  title:'Late Load-Out', focus:'pocket', bonus:true, night:true, truck:STACK_TRUCK(120, 'Box truck · 10 ft bay · 96" tall inside · lights out'),
+  cases:[{type:'cable_trunk', count:2},{type:'utility_trunk', count:12},{type:'big_trunk', count:1},{type:'hard_l', count:2},{type:'distro', count:4}],
+  availableStraps:5,
+  lesson:'<b>Late load-out.</b> The show is over and the dock lights are off. Only the case you\'re carrying has light around it; everything you\'ve loaded disappears into the dark. Remember what you built: where the pocket is, what\'s under the lid you\'re stacking on.',
+  objectives:['Load all 21 cases in the dark', 'Hard cases trapped in the pocket', 'Every tier tied in'],
+  hint:'Cable trunks + utility trunks across the nose, bar it. A big trunk and two utility trunks, with utility trunks on the big trunk and the two hard cases on the utility trunks. Distros with utility trunks close the pocket. Strap every tier.',
+  solution:[...NOSE(B2('cable_trunk'), [A4('utility_trunk')]), ...TIER(5, [['big_trunk', 0], ['utility_trunk', 8], ['utility_trunk', 12]], [[['utility_trunk', 0], ['utility_trunk', 4], ['hard_l', 8], ['hard_l', 12]]]), ...TIER(10, A4('distro'), [A4('utility_trunk')])]
+});
+LEVELS.push(BONUS_NIGHT); BONUS_NIGHT.id = 102;
 // slope levels (Omar 2026-10-08, from a real load-in on an incline): the truck is parked on a 30% grade, nose uphill, so cases on
 // wheels roll slowly back toward the doors until a load bar or strap stops them. Existing levels only, spread out after the strap lesson.
 const SLOPE_LEVELS = ['Corporate Gig', 'Lighting Day', 'LED Wall', 'Second Leg', 'Side Stage', 'The Bigger Pack'];
@@ -3156,7 +3169,11 @@ const Engine = (() => {
   const LOOP_FILL = 0.7; // Endless Tour: a truck 70% full (by volume) earns full space marks
   const LIFT_OVER = 6; // cells: one 30" row (plus a little slack) is as far as you can lift a hard case
   const hOf = (def, rot = 0) => Math.round((rot & 2 ? def.width : def.height) / IN);
-  function rectOf(state, p){ const def = state.items.get(p.uid).def; const {w, d} = dimsOf(def, p.rot); return {uid:p.uid, x:p.x, y:p.y, z:p.z || 0, w, d, h:hOf(def, p.rot), rot:p.rot, def}; }
+  function rectOf(state, p){ const def = state.items.get(p.uid).def; const {w, d} = dimsOf(def, p.rot), h = hOf(def, p.rot);
+    const cst = def.wheels ? 1 : 0; // a fallen case's casters stick out past its body by about 6" (Omar 2026-10-10, approved mock)
+    if (p.fell === 'front' || p.fell === 'back') return {uid:p.uid, x:p.x, y:p.y, z:p.z || 0, w, d:h + cst, h:d, rot:p.rot, def, fell:p.fell}; // fell over its front or back edge
+    if (p.fell === 'side') return {uid:p.uid, x:p.x, y:p.y, z:p.z || 0, w:h + cst, d, h:w, rot:p.rot, def, fell:p.fell, fellSide:p.fellSide};  // flopped onto its side
+    return {uid:p.uid, x:p.x, y:p.y, z:p.z || 0, w, d, h, rot:p.rot, def}; }
   const planOverlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.d && b.y < a.y + a.d;
   const boxOverlap = (a, b) => planOverlap(a, b) && a.z < b.z + b.h && b.z < a.z + a.h;
   // Top surface height of every floor cell (stacked levels)
@@ -3400,7 +3417,7 @@ const Engine = (() => {
     for (const r of rs){ const k = find(r.uid); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); }
     return [...groups.values()];
   }
-  function slideAll(state, placements, dx, dy){
+  function slideAll(state, placements, dx, dy, noFall){
     const rs = rects(state, placements), bars = state.bars || [], {W, D} = cellsOf(state.truck);
     const groups = supportGroups(rs).map(m => {
       const base = m.filter(r => r.z === 0);
@@ -3436,17 +3453,31 @@ const Engine = (() => {
         if (straddles(bars, moved.y, r.d, 'high')) continue;
         if (all.some(o => o.uid !== r.uid && boxOverlap(o, moved))) continue;
         if (all.some(o => o.z > r.z && planOverlap(o, r))) continue; // something sits on it; it can't slide out from under
-        moves.push({uid:r.uid, fx:r.x, fy:r.y, tx:moved.x, ty:moved.y});
-        const c = cur.get(r.uid); c.x = moved.x; c.y = moved.y; r.x = moved.x; r.y = moved.y;
+        if (r.fell) continue; // already down
+        if (noFall && noFall.has(r.uid)){ moves.push({uid:r.uid, fx:r.x, fy:r.y, tx:moved.x, ty:moved.y}); const c = cur.get(r.uid); c.x = moved.x; c.y = moved.y; r.x = moved.x; r.y = moved.y; continue; } // a trapped hard case rattles in its pocket
+        // Is there a lid at the same height right beside it? Then it SLIDES across onto it (shifted). Only a real drop makes it FALL (Omar 2026-10-10).
+        const sx = dx > 0 ? r.x + r.w : dx < 0 ? r.x - 1 : r.x, sy = dy > 0 ? r.y + r.d : dy < 0 ? r.y - 1 : r.y, sw = dx ? 1 : r.w, sd = dy ? 1 : r.d; // the strip just past its edge
+        let sup = 0; for (const o of all) if (o.uid !== r.uid && o.z + o.h === r.z){ const ox0 = Math.max(sx, o.x), ox1 = Math.min(sx + sw, o.x + o.w), oy0 = Math.max(sy, o.y), oy1 = Math.min(sy + sd, o.y + o.d); if (ox1 > ox0 && oy1 > oy0) sup += (ox1 - ox0) * (oy1 - oy0); }
+        if (sup >= sw * sd){ moves.push({uid:r.uid, fx:r.x, fy:r.y, tx:moved.x, ty:moved.y}); const c = cur.get(r.uid); c.x = moved.x; c.y = moved.y; r.x = moved.x; r.y = moved.y; continue; }
+        // A drop: it tips over the edge of the stack and falls (braking: onto its face toward the nose; turns: onto its side; pulling away: onto its back toward the doors)
+        const f = dy < 0 ? 'front' : dy > 0 ? 'back' : 'side', fp = {...cur.get(r.uid), fell:f, fellSide:dx};
+        const fr = rectOf(state, fp);
+        let tx = r.x, ty = r.y;
+        if (f === 'front') ty = Math.max(0, r.y - fr.d); else if (f === 'back') ty = Math.min(D - fr.d, r.y + r.d); else tx = dx > 0 ? Math.min(W - fr.w, r.x + r.w) : Math.max(0, r.x - fr.w);
+        const land = all.filter(o => o.uid !== r.uid && o.z + o.h <= r.z && o.x < tx + fr.w && tx < o.x + o.w && o.y < ty + fr.d && ty < o.y + o.d).reduce((m, o) => Math.max(m, o.z + o.h), 0); // right off the edge: the floor, or the lower cases there
+        moves.push({uid:r.uid, fx:r.x, fy:r.y, tx, ty, fz:r.z, tz:land, fall:{f, s:dx}});
+        const c = cur.get(r.uid); Object.assign(c, {x:tx, y:ty, z:land, fell:f, fellSide:dx}); Object.assign(r, {x:tx, y:ty, z:land, w:fr.w, d:fr.d, h:fr.h});
       }
     }
     return {after:[...cur.values()], moves};
   }
   function simulateTransit(state, placements){
     let cur = (placements || state.placements).map(p => ({...p}));
-    const phases = [], shifted = new Map(), rolled = new Map();
+    const phases = [], shifted = new Map(), rolled = new Map(), fallen = new Map();
+    const pocketed = state.stacked ? trappedSet(state, placements || state.placements) : new Map();
     for (const ph of state.accel ? [...PHASES, ACCEL] : PHASES){
-      const res = slideAll(state, cur, ph.dx, ph.dy);
+      const res = slideAll(state, cur, ph.dx, ph.dy, pocketed); // a fallen case still rides along with whatever it landed on
+      for (const m of res.moves) if (m.fall) fallen.set(m.uid, {f:m.fall.f, phase:ph.key});
       for (const m of res.moves){
         const map = ph.key === 'accel' ? rolled : shifted;
         const s = map.get(m.uid) || {cells:0, phases:[]};
@@ -3458,7 +3489,8 @@ const Engine = (() => {
     // trapped hard cases may rattle inside their pocket, but they can't get out
     const trapped = state.stacked ? trappedSet(state, placements || state.placements) : new Map(), rattled = [];
     for (const u of trapped.keys()){ if (shifted.has(u) || rolled.has(u)) rattled.push(u); shifted.delete(u); rolled.delete(u); }
-    return {phases, final:cur, shifted, rolled, trapped, rattled};
+    for (const u of fallen.keys()) if (!shifted.has(u)) shifted.set(u, {cells:1, phases:[fallen.get(u).phase]});
+    return {phases, final:cur, shifted, rolled, trapped, rattled, fallen};
   }
 
   function calculateSpaceEfficiency(state, placements){
@@ -3711,11 +3743,14 @@ const Engine = (() => {
       pocket:    {pass:!looseHard.length && transit.shifted.size <= 1, label:'trap the small hard cases in pockets, closed in by the next row'},
       all:       {pass:(!unload || unload.outOfOrder <= 2) && transit.shifted.size <= 1 && (!secure.active || secure.accelHeld >= .9) && !(stab.stackIssues || []).length && !looseHard.length, label:'put it all together: tight, secured, and in unload order'}
     }[level.focus];
+    const fell = transit.fallen && transit.fallen.size;
     const final = total; // a missed lesson fails the level but the score stays honest
     if (LESSON && !LESSON.pass)
       fb.unshift(['bad', `<b>Lesson missed:</b> this level is about learning to ${LESSON.label}. The pack scored ${total}, but the level isn't passed until you follow the lesson.`]);
+    if (fell){ const what = [...transit.fallen.entries()].map(([u, v]) => `the ${state.items.get(u).def.name} (${v.phase === 'brake' ? 'hard braking' : v.phase === 'accel' ? 'pulling away' : 'a turn'})`);
+      fb.unshift(['bad', `<b>A case fell:</b> ${listNames(what)} fell off ${fell > 1 ? 'their stacks' : 'its stack'}. A falling case is an automatic fail, whatever the score: on the road it's damaged gear and a hazard when the doors open. Box in every case on top so nothing has open air beside it.`]); }
     if (final >= 90 && !(handled && reh) && !transit.shifted.size && !(unload && unload.outOfOrder) && !stab.violations.length && !(stab.stackIssues || []).length && (!secure.active || secure.score01 >= .9)) badges.push('SHOW READY');
-    return {total:final, rawTotal:total, lessonPassed:!LESSON || LESSON.pass, cats, badges, feedback:fb, space, stab, unload, secure, transit, rehandles:reh, rehPen, lesson:LESSON ? LESSON.label : null};
+    return {total:final, rawTotal:total, lessonPassed:(!LESSON || LESSON.pass) && !fell, fell:!!fell, cats, badges, feedback:fb, space, stab, unload, secure, transit, rehandles:reh, rehPen, lesson:LESSON ? LESSON.label : null};
   }
 
   // A legal spot can still be a bad idea; explain why before the player commits.
@@ -3898,6 +3933,36 @@ function cornerCap(ctx, cx, cy, L, sx, sy){
   ctx.restore();
 }
 function cornerCaps(ctx, x, y, w, h, L){ cornerCap(ctx, x, y, L, 1, 1); cornerCap(ctx, x + w, y, L, -1, 1); cornerCap(ctx, x, y + h, L, 1, -1); cornerCap(ctx, x + w, y + h, L, -1, -1); }
+// The BOTTOM of a road case (Omar's photo, 2026-10-10): dark plywood panel, aluminum edge, corner caps, two bolt heads in the middle,
+// and four swivel casters on bolted steel plates near the corners (two of them with brake tabs). Used when a case falls on its face.
+function drawCaseBottom(ctx, x, y, w, h, def, o = {}){
+  const e = clamp(Math.min(w, h) * .05, 1.5, 6);
+  ctx.save();
+  const g = ctx.createLinearGradient(x, y, x + w, y + h); g.addColorStop(0, '#2a2723'); g.addColorStop(1, '#1b1916');
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = 'rgba(255,255,255,.04)'; ctx.lineWidth = 1; for (let i = 1; i < 6; i++){ ctx.beginPath(); ctx.moveTo(x + w * .1, y + h * i / 6 + (i % 2) * 2); ctx.lineTo(x + w * .9, y + h * i / 6 - (i % 2) * 2); ctx.stroke(); } // plywood grain
+  ctx.lineWidth = e; ctx.strokeStyle = metal(ctx, x, y, x + w, y + h); ctx.strokeRect(x + e / 2, y + e / 2, w - e, h - e);              // aluminum edge
+  cornerCaps(ctx, x, y, w, h, e * 2.6);
+  const bolt = (bx, by, r) => { const bg = ctx.createRadialGradient(bx - r * .3, by - r * .3, r * .1, bx, by, r); bg.addColorStop(0, '#f2f3f0'); bg.addColorStop(1, '#6a6e69'); ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(bx, by, r, 0, 7); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.6)'; ctx.lineWidth = Math.max(.6, r * .2); ctx.stroke(); };
+  if (Math.min(w, h) > 30) for (const fx of [.38, .62]) bolt(x + w * fx, y + h * .52, Math.max(1.2, Math.min(w, h) * .018));
+  if (def.wheels){
+    const cs = Math.min(w, h) * .33, pad = e * 2.2 + cs * .5;
+    const spots = [[x + pad, y + pad, false], [x + w - pad, y + pad, true], [x + pad, y + h - pad, true], [x + w - pad, y + h - pad, false]];
+    for (const [cx, cy, brake] of spots){
+      const pw = cs * .74, ph = cs * .8;
+      const mg = ctx.createLinearGradient(cx - pw / 2, cy - ph / 2, cx + pw / 2, cy + ph / 2); mg.addColorStop(0, '#dfe2de'); mg.addColorStop(.5, '#a7aba6'); mg.addColorStop(1, '#7c807b');
+      ctx.fillStyle = mg; rr(ctx, cx - pw / 2, cy - ph / 2, pw, ph, Math.max(1, cs * .05)); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = Math.max(.7, cs * .025); ctx.stroke(); // mounting plate
+      for (const [bx, by] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) bolt(cx + bx * pw * .34, cy + by * ph * .36, Math.max(.8, cs * .045));
+      const ww = cs * .36, wh = cs * .92, wx = cx - ww / 2 + cs * .07, wy = cy - wh / 2 + cs * .12;
+      ctx.fillStyle = '#9a9e99'; ctx.fillRect(wx - cs * .05, wy + wh * .2, ww + cs * .1, wh * .6);                                             // fork, either side of the wheel
+      const tg = ctx.createLinearGradient(wx, 0, wx + ww, 0); tg.addColorStop(0, '#2c3440'); tg.addColorStop(.5, '#4a5666'); tg.addColorStop(1, '#232a33');
+      ctx.fillStyle = tg; rr(ctx, wx, wy, ww, wh, ww * .45); ctx.fill(); ctx.strokeStyle = '#0d0f12'; ctx.lineWidth = Math.max(.7, cs * .025); ctx.stroke(); // the wheel, tread toward you
+      bolt(wx + ww / 2, wy + wh / 2, Math.max(.9, cs * .05));                                                                               // axle nut
+      if (brake){ const by = cy < y + h / 2 ? wy + wh + cs * .02 : wy - cs * .2; ctx.fillStyle = '#c9ccc8'; rr(ctx, wx - cs * .04, by, ww + cs * .08, cs * .18, cs * .04); ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.stroke(); } // brake tab
+    }
+  }
+  ctx.restore();
+}
 // A swivel caster from the side, from the case down: a black wooden block (screwed in from inside the case), the caster's
 // mounting plate bolted under it, one wheel, and the metal fork on the outside of the wheel with the axle pin through it (Omar 2026-10-08).
 function caster(ctx, cx, top, ch){
@@ -4101,6 +4166,20 @@ function drawLogoPlate(ctx, cx, cy, size){
 }
 
 // Road case seen from the front (title screen, door view, dock stack)
+// The END panel of a road case (Omar 2026-10-10, for corner tip-overs): the short end, one recessed handle in the middle, the lid seam,
+// corner caps, and the two casters on that end. Same style colours as the front.
+function drawCaseEnd(ctx, x, y, w, h, o = {}){
+  const st = styleOf(o.style);
+  const wheelH = o.wheels ? (o.wheelH != null ? Math.min(h * .2, o.wheelH / .14 * .2) : Math.min(h * .2, 20)) : 0, bh = h - wheelH, e = clamp(Math.min(w, bh) * .07, 2.5, 7);
+  if (o.wheels) for (const cx of [x + w * .17, x + w * .83]) caster(ctx, cx, y + bh, wheelH);
+  const g = ctx.createLinearGradient(x, y, x, y + bh); g.addColorStop(0, st.a); g.addColorStop(1, st.b);
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, bh);
+  casePattern(ctx, st, x + e, y + e, w - 2 * e, bh - 2 * e);
+  ctx.lineWidth = e; ctx.strokeStyle = metal(ctx, x, y, x + w, y + bh); ctx.strokeRect(x + e / 2, y + e / 2, w - e, bh - e);
+  const seam = y + bh * .24; ctx.fillStyle = metal(ctx, x, y, x + w, y + bh); ctx.fillRect(x + e, seam - e * .35, w - 2 * e, e * .7); // lid seam
+  drawHandle(ctx, x + w / 2, y + bh * .6, clamp(w * .3, 12, 40));                                                                   // one handle, centred
+  cornerCaps(ctx, x, y, w, bh, e * 2.3);
+}
 function drawCaseFront(ctx, x, y, w, h, o = {}){
   const st = styleOf(o.style);
   // casters get 20% of the height (they had 14%) so the fork and wheel read; the case's total height doesn't change
@@ -4197,7 +4276,7 @@ function closeModals(){ for (const m of document.querySelectorAll('.modal-back')
 
 /* ---------- level lifecycle ---------- */
 function loadLevel(idx){  const lv = LEVELS[idx]; if (lv && lv.exam){ if (examReady(G.progress)) openExam(); else openLevels(); return; } loadLevelObj(lv, idx); }
-function loadLevelObj(lv, idx){
+function loadLevelObj(lv, idx){ NIGHT_MUSIC.stop();
   G.crewOff = false; G.warnSeen = {}; G.coachPeek = 0; G.rehandles = 0; G.lastPlaced = null; // the crew comes back on every new level
   G.levelIdx = idx; G.level = lv;
   G.items = new Map(); let n = 0;
@@ -4206,7 +4285,7 @@ function loadLevelObj(lv, idx){
   if (G.level.stacked && G.level._par == null) G.level._par = levelPar(G.level); G.ghost = null; G.hover = null; G.lastInfo = null; G.lastPlaced = null; G.slide = {}; $('dockZone').hidden = true;
   G.coachStep = 0; G.transitView = null; G.anim = null; G.flash = null; G.floorCache = null;
   setScreen('game'); layout();
-  $('hudLevel').textContent = G.level.demo ? 'DEMO' : G.level.id;
+  $('hudLevel').textContent = G.level.demo ? 'DEMO' : G.level.bonus ? 'BONUS' : G.level.id;
   $('hudUnloadWrap').classList.toggle('off', !G.level.unloadSequence);
   $('hudSecureWrap').classList.toggle('off', !Engine.secureActive(G.level));
   G.offMistakes = []; if (G.level.offload) loadPack();
@@ -4216,7 +4295,7 @@ function loadLevelObj(lv, idx){
 }
 function showBriefing(){
   const lv = G.level; if (!lv){ openLevels(); return; }
-  $('brKicker').textContent = lv.demo ? 'PRACTICE BAY · NO SCORE · NOTHING SAVED' : `LEVEL ${lv.id} OF 101 · ${tierOf(lv.id).name} · ${lv.boss ? 'BOSS LOAD' : lv.practice ? 'PRACTICE' : lv.stacked ? 'STACKED LOAD' : 'FLOOR LOAD'}`;
+  $('brKicker').textContent = lv.demo ? 'PRACTICE BAY · NO SCORE · NOTHING SAVED' : lv.bonus ? 'BONUS LEVEL · AFTER THE EXPERT FINAL · STACKED LOAD · LIGHTS OUT' : `LEVEL ${lv.id} OF 101 · ${tierOf(lv.id).name} · ${lv.boss ? 'BOSS LOAD' : lv.practice ? 'PRACTICE' : lv.stacked ? 'STACKED LOAD' : 'FLOOR LOAD'}`;
   $('brTitle').textContent = lv.title;
   let h = `<p>${lv.lesson}</p>`;
   h += `<div class="truck-spec">TRUCK: ${lv.truck.name.toUpperCase()} · ${lv.truck.width}" WIDE × ${lv.truck.depth}" DEEP (${fmtLen(lv.truck.depth)})</div>`;
@@ -4431,7 +4510,7 @@ function renderAbilityList(){
 }
 $('abList').addEventListener('click', e => { const b = e.target.closest('[data-ab]'); if (b){ closeModals(); showAbility(b.dataset.ab); } });
 $('abGo').onclick = closeAbility;
-function startPlay(){ closeModals(); if (G.level && !G.level.loop) sfx('beeper'); /* the truck backs in */ if (G.level && G.level.id && !G.level.demo) stat('level_start', {level:G.level.id}); G.mode = 'play'; G.coachShowUntil = performance.now() + COACH_LESSON_MS; G.coachFirst = true; G.warnSeen = {}; refresh(); }
+function startPlay(){ closeModals(); if (G.level && G.level.night) NIGHT_MUSIC.start(); else NIGHT_MUSIC.stop(); if (G.level && !G.level.loop) sfx('beeper'); /* the truck backs in */ if (G.level && G.level.id && !G.level.demo) stat('level_start', {level:G.level.id}); G.mode = 'play'; G.coachShowUntil = performance.now() + COACH_LESSON_MS; G.coachFirst = true; G.warnSeen = {}; refresh(); }
 
 /* ---------- layout + rendering ---------- */
 const PHONE_RESERVE = 124; // phone: the button row + READY under the truck
@@ -4566,16 +4645,32 @@ function render(){
   const pos = [...currentPositions()].sort((a, b) => (a.z || 0) - (b.z || 0));
   const shifted = G.anim ? G.anim.shiftedNow : G.transitView ? G.transitView.shifted : null;
   for (const p of pos){
-    const it = itemOf(p.uid), {w, d} = Engine.dimsOf(it.def, p.rot);
-    drawCaseTop(ctx, ox + p.x * cell, oy + (p.y + (G.slide && G.slide[p.uid] ? G.slide[p.uid].f : 0)) * cell, w * cell, d * cell, it.def, {
+    const it = itemOf(p.uid), {w, d} = p.fell ? Engine.rectOf(state(), p) : Engine.dimsOf(it.def, p.rot);
+    if (p.fell){ const fx = ox + p.x * cell, fy = oy + p.y * cell, side = p.fell === 'side', B = side ? d * cell : w * cell, L = side ? w * cell : d * cell; // the "on its side" look laid flat (approved mock): wheels toward where its bottom faces, sticking out past the body
+      ctx.save(); ctx.translate(fx + w * cell / 2, fy + d * cell / 2); ctx.rotate(p.fell === 'front' ? 0 : p.fell === 'back' ? Math.PI : p.fellSide > 0 ? Math.PI / 2 : -Math.PI / 2);
+      drawCaseFront(ctx, -B / 2, -L / 2, B, L, {wheels:!!it.def.wheels, wheelH:it.def.wheels ? cell * .7 : 0, style:it.def.style, label:it.def.department}); ctx.restore(); }
+    else drawCaseTop(ctx, ox + p.x * cell, oy + (p.y + (G.slide && G.slide[p.uid] ? G.slide[p.uid].f : 0)) * cell, w * cell, d * cell, it.def, {
       hover:G.hover === p.uid && !G.hand, shifted:shifted && shifted.has(p.uid), elev:(p.z || 0) * IN,
       priority:G.level.unloadSequence ? Engine.priorityOf(G.level, it.def) : null
     });
     if (p.rot & 2) sideTag(ctx, ox + p.x * cell, oy + (p.y + d) * cell);
+    if (p.fell){ const cx = ox + p.x * cell, cy = oy + p.y * cell, len = Math.max(6, cell * .9), wid = clamp(Math.min(w, d) * cell * .2, 6, 14);
+      fellTag(ctx, p.fell === 'back' || (p.fell === 'side' && p.fellSide < 0) ? cx : cx + w * cell - 40, p.fell === 'back' ? cy + d * cell - 19 : cy); } // the tag sits on the corner away from the wheels
   }
   // load bars and straps
   for (const b of G.bars) drawDevice(ctx, b.kind, b.y, {hover:G.hoverBar === b && !G.hand && !G.tool, tier:b.tier});
   if (G.tool && G.tool.L != null) drawDevice(ctx, G.tool.kind, G.tool.L, {ghost:true, valid:G.tool.ok, tier:G.tool.tier});
+  for (const t of G.tips || []){ const k = clamp((performance.now() - t.t0) / TIP_MS, 0, 1); if (performance.now() < t.t0) continue; // each one topples off (bouncing off a wall if it hits one), then fades
+    const pp = tipPos(t, k), fade = clamp((TIP_MS - (performance.now() - t.t0)) / 300, 0, 1);
+    drawTipCase(ctx, t, ox + pp.x * cell, oy + pp.y * cell, cell, fade);
+    if (k > .3) fellTag(ctx, ox + (t.ex - t.w / 2) * cell, oy + (t.ey - t.d / 2) * cell); }
+  if (nightOn()){ // the light: on the case in hand, the bar/strap being placed, or the last case set down
+    let cx = ox + Wp / 2, cy = oy + cell * 4, r = Wp * .4;
+    if (G.hand && G.ghost){ const {w, d} = Engine.dimsOf(itemOf(G.hand.uid).def, G.hand.rot); cx = ox + (G.ghost.x + w / 2) * cell; cy = oy + (G.ghost.y + d / 2) * cell; r = Math.min(Wp * .46, Math.max(w, d) * cell * .75 + cell * 4); }
+    else if (G.tool && G.tool.L != null){ cy = oy + G.tool.L * cell; r = Wp * .42; }
+    else r = 0; // Omar 2026-10-10: between cases the light goes off; it comes back when you pick up the next case
+    nightDark(ctx, cx, cy, r, currentPositions().map(p => { const {w, d} = Engine.dimsOf(itemOf(p.uid).def, p.rot); return [ox + p.x * cell, oy + p.y * cell, w * cell, d * cell]; }));
+  }
   // ghost (case in hand)
   if (G.hand && G.ghost){
     const g = G.ghost;
@@ -4726,6 +4821,29 @@ function puffRing(ctx, cx, cy, rx, ry, blob, turn){ // little cartoon puffs arou
   }
 }
 
+// A fallen case (Omar 2026-10-10): its bottom faces a wall or the doors, so its casters show along that edge from above. dir: 'l' 'r' 'd' 'u'
+function casterTop(ctx, x, y, dir, len, wid){
+  ctx.save(); ctx.translate(x, y); ctx.rotate({r:0, d:Math.PI / 2, l:Math.PI, u:-Math.PI / 2}[dir] || 0);
+  ctx.fillStyle = '#151515'; ctx.fillRect(0, -wid * .65, len * .22, wid * 1.3);
+  const g = ctx.createLinearGradient(0, -wid / 2, 0, wid / 2); g.addColorStop(0, '#d9dcd8'); g.addColorStop(.5, '#9a9e99'); g.addColorStop(1, '#6a6e69');
+  ctx.fillStyle = g; ctx.fillRect(len * .22, -wid * .42, len * .38, wid * .84); ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1; ctx.strokeRect(len * .22, -wid * .42, len * .38, wid * .84);
+  ctx.fillStyle = '#121314'; ctx.beginPath(); ctx.roundRect(len * .45, -wid * .24, len * .55, wid * .48, wid * .2); ctx.fill(); ctx.strokeStyle = '#000'; ctx.stroke();
+  ctx.restore();
+}
+function fellTag(ctx, x, y){ ctx.save(); ctx.font = "800 11px 'Barlow Condensed', sans-serif"; const tw = ctx.measureText('FELL').width + 10;
+  ctx.fillStyle = '#e8604a'; ctx.fillRect(x + 3, y + 3, tw, 13); ctx.strokeStyle = '#111'; ctx.lineWidth = 1; ctx.strokeRect(x + 3, y + 3, tw, 13);
+  ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FELL', x + 3 + tw / 2, y + 10); ctx.restore(); }
+// LATE LOAD-OUT: darkness with one soft circle of light (Omar 2026-10-10). r: bigger than the case, smaller than the truck.
+const nightOn = () => !!(G.level && G.level.night && G.mode === 'play');
+function nightDark(ctx, cx, cy, r, outlines){
+  const A = 1; ctx.save(); // fully dark outside the light (Omar 2026-10-10, asked twice for darker)
+  if (!(r > 0)){ ctx.fillStyle = `rgba(6,8,14,${A})`; ctx.fillRect(-4000, -4000, 9000, 9000); ctx.restore(); return; } // hands empty: lights out
+  ctx.beginPath(); ctx.rect(-4000, -4000, 9000, 9000); ctx.arc(cx, cy, r, 0, Math.PI * 2, true); ctx.fillStyle = `rgba(6,8,14,${A})`; ctx.fill('evenodd');
+  const g = ctx.createRadialGradient(cx, cy, r * .62, cx, cy, r); g.addColorStop(0, 'rgba(6,8,14,0)'); g.addColorStop(1, `rgba(6,8,14,${A})`);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r + .5, 0, Math.PI * 2); ctx.fill();
+  // no outlines (Omar 2026-10-10): outside the light it's dark, so you work from memory
+  ctx.restore();
+}
 // Small ON SIDE tag on the bottom-left corner of a tipped case (top view)
 function sideTag(ctx, x, yb){
   ctx.save(); ctx.font = "800 10px 'Barlow Condensed', sans-serif"; const tw = ctx.measureText('ON SIDE').width + 8;
@@ -4772,6 +4890,14 @@ function renderDoor(ctx){
   const shifted = G.anim ? G.anim.shiftedNow : G.transitView ? G.transitView.shifted : null;
   const drawFront = (r, px, z, o = {}) => {
     const x = ox + px * cell, w = r.w * cell, h = r.h * cell, y = floorY - (z + r.h) * cell;
+    if (r.fell){ // fallen (Omar 2026-10-10): toward the nose you see its bottom and four casters; toward the doors, its lid; flopped, the front turned 90° with the casters out the side
+      if (r.fell === 'back') drawCaseTop(ctx, x + 1, y + 1, w - 2, h - 1, r.def, {}); // its lid faces the doors
+      else if (r.fell === 'front') drawCaseBottom(ctx, x + 1, y + 1, w - 2, h - 1, r.def); // its bottom faces the doors: plywood, corner caps, four casters
+      else { const fw = h - 1, fh = w - 2; ctx.save(); ctx.translate(x + 1 + fh / 2, y + 1 + fw / 2); ctx.rotate(r.fellSide > 0 ? Math.PI / 2 : -Math.PI / 2);
+        drawCaseFront(ctx, -fw / 2, -fh / 2, fw, fh, {wheels:!!r.def.wheels, wheelH:r.def.wheels ? Math.min(fh * .14, 5 * s) : 0, style:r.def.style, label:r.def.department}); ctx.restore(); }
+      ctx.fillStyle = 'rgba(232,96,74,.18)'; ctx.fillRect(x, y, w, h); ctx.strokeStyle = '#e8604a'; ctx.lineWidth = 3; ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3);
+      if (o.fade > 0){ ctx.fillStyle = `rgba(12,12,11,${Math.min(.72, o.fade)})`; ctx.fillRect(x, y, w, h); }
+      return; }
     drawCaseFront(ctx, x + 1, y + 1, w - 2, h - 1, {wheels:r.def.wheels && !(r.rot & 2), wheelH:r.def.wheels && !(r.rot & 2) ? Math.min(h * .14, 5 * s) : 0, style:r.def.style, label:r.def.department});
     if (o.fade > 0){ ctx.fillStyle = `rgba(12,12,11,${Math.min(.72, o.fade)})`; ctx.fillRect(x, y, w, h); }
     if (o.outline){ ctx.strokeStyle = o.outline; ctx.lineWidth = 3; if (o.dash) ctx.setLineDash([7, 5]); ctx.strokeRect(x + 1.5, y + 1.5, w - 3, h - 3); ctx.setLineDash([]); }
@@ -4786,9 +4912,18 @@ function renderDoor(ctx){
   const drawDoorDevice = (b, o = {}) => {
     const yy = floorY - railOf(b) * s, t = b.kind === 'bar' ? Math.max(6, 2.6 * s) : Math.max(5, 2 * s);
     ctx.globalAlpha = o.alpha != null ? o.alpha : .95 - Math.min(.6, (loadEnd - b.y) / loadEnd * .8);
-    ctx.fillStyle = o.color || (b.kind === 'bar' ? metal(ctx, 0, yy - t / 2, 0, yy + t / 2) : '#e6a21c');
-    ctx.fillRect(ox - 12, yy - t / 2, Wp + 24, t);
-    ctx.fillStyle = '#2b2c29'; for (const ex of [ox - 12, ox + Wp + 4]) ctx.fillRect(ex, yy - 4, 8, 8); // end fittings in the rail
+    if (b.kind === 'bar' || o.color){
+      ctx.fillStyle = o.color || metal(ctx, 0, yy - t / 2, 0, yy + t / 2); ctx.fillRect(ox - 12, yy - t / 2, Wp + 24, t);
+      ctx.fillStyle = '#2b2c29'; for (const ex of [ox - 12, ox + Wp + 4]) ctx.fillRect(ex, yy - 4, 8, 8); // end fittings in the rail
+    } else { // the strap looks the same as in the top view (Omar 2026-10-10): woven webbing, the ratchet in the middle, grey fittings in the E-track
+      const st = Math.max(6, 2 * s);
+      ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(ox - 10, yy - st / 2 + 2, Wp + 20, st);
+      ctx.fillStyle = '#e6a21c'; ctx.fillRect(ox - 10, yy - st / 2, Wp + 20, st);
+      ctx.strokeStyle = 'rgba(120,70,0,.55)'; ctx.lineWidth = 1;
+      for (let xx = ox - 10; xx < ox + Wp + 10 - 3; xx += 6){ ctx.beginPath(); ctx.moveTo(xx, yy - st / 2); ctx.lineTo(xx + 3, yy + st / 2); ctx.stroke(); }
+      const bw = Math.max(16, 7 * s); ctx.fillStyle = metal(ctx, 0, yy - st, 0, yy + st); rr(ctx, ox + Wp / 2 - bw / 2, yy - st, bw, st * 2, 2); ctx.fill(); ctx.strokeStyle = '#222'; ctx.stroke();
+      ctx.fillStyle = '#8f938e'; for (const ex of [ox - 13, ox + Wp + 5]) ctx.fillRect(ex, yy - st * .7, 8, st * 1.4);
+    }
     if (o.outline){ ctx.strokeStyle = o.outline; ctx.lineWidth = 2; ctx.setLineDash(o.dash ? [6, 4] : []); ctx.strokeRect(ox - 13, yy - t / 2 - 2, Wp + 26, t + 4); ctx.setLineDash([]); }
     ctx.globalAlpha = 1;
   };
@@ -4799,6 +4934,20 @@ function renderDoor(ctx){
   }}));
   for (const b of G.bars) draws.push({k:b.y + .5, z:0, f:() => drawDoorDevice(b)});
   draws.sort((a, b) => a.k - b.k || a.z - b.z).forEach(d => d.f());
+  for (const t of G.tips || []){ if (performance.now() < t.t0) continue; const def = itemOf(t.uid).def, hh = Engine.hOf(def, t.rot), wheel = def.wheels ? 1 : 0, fade = clamp((TIP_MS - (performance.now() - t.t0)) / 300, 0, 1), pp = tipPos(t, clamp((performance.now() - t.t0) / TIP_MS, 0, 1));
+    ctx.save(); ctx.globalAlpha = fade;
+    if (!t.dx){ const bw = t.w * cell, bh = t.d * cell; drawCaseBottom(ctx, ox + pp.x * cell - bw / 2, floorY - bh, bw, bh, def); } // flipped over: you see its bottom
+    else { const L = (hh + wheel) * cell, B = t.w * cell; ctx.translate(clamp(ox + pp.x * cell, ox + L / 2, ox + Wp - L / 2), floorY - B / 2); ctx.rotate(t.dx > 0 ? Math.PI / 2 : -Math.PI / 2); // wheels point back toward where it was dropped
+      drawCaseFront(ctx, -B / 2, -L / 2, B, L, {wheels:!!def.wheels, wheelH:def.wheels ? cell * .7 : 0, style:def.style, label:def.department}); }
+    ctx.restore(); }
+  if (nightOn()){ // door view is just as dark: the light rides the case in hand, else the last case set down
+    let cx = ox + Wp / 2, cy = floorY - Hp * .3, r = Wp * .4;
+    const lit = (x, z, w, h) => { cx = ox + (x + w / 2) * cell; cy = floorY - (z + h / 2) * cell; r = Math.min(Wp * .46, Math.max(w, h) * cell * .75 + cell * 4); };
+    if (G.hand && G.ghost){ const def = itemOf(G.hand.uid).def, {w} = Engine.dimsOf(def, G.hand.rot); lit(G.ghost.x, G.ghost.z || 0, w, Engine.hOf(def, G.hand.rot)); }
+    else if (G.tool && G.tool.L != null){ cy = floorY - Hp * (G.tool.tier === 'high' ? .6 : .25); }
+    else r = 0; // lights out between cases
+    nightDark(ctx, cx, cy, r, pos.map(o => [ox + o.p.x * cell, floorY - (o.r.z + o.r.h) * cell, o.r.w * cell, o.r.h * cell]));
+  }
   if (G.tool && G.tool.L != null){ // the tool ghost floats in front so you can always see where it will go
     const t = G.tool; drawDoorDevice({kind:t.kind, y:t.L, tier:t.tier}, {alpha:.9, outline:t.ok ? '#8fcf6a' : '#e8604a', dash:!t.ok});
     ctx.fillStyle = t.ok ? '#ebe3cb' : '#e8604a'; ctx.font = "800 19px 'Barlow Condensed', sans-serif"; ctx.textAlign = 'center';
@@ -5120,7 +5269,7 @@ const CREW = {chief:'CREW CHIEF', stagehand:'LEAD STAGEHAND', rigger:'RIGGER', d
 function crewFor(lv){
   if (!lv || lv.demo) return 'chief';
   if (lv.loop) return G.loop && G.loop.loadIn ? 'docklead' : 'chief';
-  const id = +lv.id || 0;
+  const id = +lv.id || 0; if (lv.night) return 'rigger';
   return id > 100 ? 'chief' : id > 90 ? 'docklead' : id > 60 ? 'rigger' : id > 30 ? 'stagehand' : 'chief';
 }
 const crewCache = {};
@@ -5221,16 +5370,15 @@ function renderCoach(){
   if (G.hand && G.ghost && G.ghost.ok) return say('good', 'Good spot. Click (or press ENTER) to set it down.', 'live');
   say('tip', lv.lesson, 'lesson');
 }
-const CREW_HMM = true; // the thumbs-up "hmm": on in the test copy, off on the live site until Omar has heard it
+const CREW_HMM = true; // the thumbs-up voices: approved by Omar 2026-10-10, on everywhere
 const CREW_VOICE = {stagehand:1.07, docklead:.93}; // crew voices (throat clear, "huh?", approvals): Lead Stagehand a touch higher, Dock Lead a touch deeper; Chief and Rigger as recorded
 function flashCoach(kind, html, ms = 3500){
   G.coachOverride = {kind, html, until:performance.now() + ms}; renderCoach(); setTimeout(renderCoach, ms + 20);
   if (document.body.classList.contains('crew-away')) return; // no voice without the crew on screen (dismissed, or a menu open)
   if ((kind === 'bad' || kind === 'warn') && performance.now() - (flashCoach.voice || 0) > 1500){ flashCoach.voice = performance.now(); setTimeout(() => sfx(kind === 'bad' ? 'throat' : 'huh'), 120); } // red WON'T WORK: "ahem"; yellow HEADS UP: a questioning "huh?"
   if (CREW_HMM && kind === 'good' && performance.now() - (flashCoach.hmm || 0) > 1500){ flashCoach.hmm = performance.now();
-    const p = G.progress, n = p.thumbs = (p.thumbs || 0) + 1; saveProgress(); // counted across levels and visits
-    let pick = 'awyeah'; if (n % 12){ pick = Math.random() < .2 ? 'hmm' : 'affirm'; if (pick === 'hmm' && flashCoach.lastOk === 'hmm') pick = 'affirm'; } flashCoach.lastOk = pick; // the Aha or one of four approvals, never the same twice in a row
-    setTimeout(() => sfx(pick), 120); } // the thumbs-up crew approves; every 12th time it's "awww yeah"
+    let pick = Math.random() < .25 ? 'hmm' : 'affirm'; if (pick === 'hmm' && flashCoach.lastOk === 'hmm') pick = 'affirm'; flashCoach.lastOk = pick; // the Hmm or one of three approvals (OK 1, OK 2, Mmm Hmm), about even, never twice in a row
+    setTimeout(() => sfx(pick), 120); } // approved set, Omar 2026-10-10: Hmm, OK 1, OK 2, Mmm Hmm (no more "aww yeah")
 }
 function fire(ev){
   const lv = G.level; if (!lv.coach) return;
@@ -5303,7 +5451,7 @@ function setGhost(x, y){
   const h = G.hand; if (!h) return;
   if (h.from === 'truck' && G.ghost && (G.ghost.x !== x || G.ghost.y !== y)) rollMove(); // a loaded case being moved: it rolls
   const res = testPlace(x, y);
-  G.ghost = {x, y, z:res.z || 0, ok:res.ok, reason:res.reason, warn:res.ok ? Engine.getPlacementWarning(state(), G.level, h.uid, x, y, h.rot, null, res.z || 0) : null};
+  G.ghost = {x, y, z:res.z || 0, ok:res.ok, code:res.code, reason:res.reason, warn:res.ok ? Engine.getPlacementWarning(state(), G.level, h.uid, x, y, h.rot, null, res.z || 0) : null};
 }
 function testPlace(x, y){
   const h = G.hand, st = state();
@@ -5457,9 +5605,73 @@ function tipHand(){
   }
   refresh();
 }
+// TIP-OVER (Omar 2026-10-10, approved mock): drop a case where it can't sit flat (straddling mixed heights, hanging off a stack, on a
+// non-stackable lid) and it tips over toward the side it hangs off, lies there about a second, then goes back to the dock. No penalty.
+// Nose / doors: a complete flip, wheels up. Walls: on its side (front panel). Corners: on its end panel. Wheels point back to the drop spot.
+const TIP_CODES = new Set(['uneven', 'nonstackable', 'support']), TIP_MS = 1300;
+function tipOver(h, g){
+  const members = h.stack ? h.stack.map((m, i) => ({uid:m.uid, rot:m.rot, dx:i ? m.dx : 0, dy:i ? m.dy : 0})) : [{uid:h.uid, rot:h.rot, dx:0, dy:0}];
+  const base = itemOf(members[0].uid).def, bd = Engine.dimsOf(base, members[0].rot), rs = Engine.rects(state());
+  const top = (xx, yy) => rs.reduce((m, r) => xx >= r.x && xx < r.x + r.w && yy >= r.y && yy < r.y + r.d ? Math.max(m, r.z + r.h) : m, 0);
+  let zTop = 0; for (let yy = g.y; yy < g.y + bd.d; yy++) for (let xx = g.x; xx < g.x + bd.w; xx++) zTop = Math.max(zTop, top(xx, yy));
+  let sx = 0, sy = 0, n = 0; for (let yy = g.y; yy < g.y + bd.d; yy++) for (let xx = g.x; xx < g.x + bd.w; xx++) if (top(xx, yy) === zTop){ sx += xx + .5; sy += yy + .5; n++; }
+  let vx = g.x + bd.w / 2 - (n ? sx / n : g.x + bd.w / 2), vy = g.y + bd.d / 2 - (n ? sy / n : g.y + bd.d / 2); // from the high, supported part toward the side it hangs off
+  if (Math.hypot(vx, vy) < .01){ vx = 0; vy = 1; }
+  const a = Math.round(Math.atan2(vy, vx) / (Math.PI / 4)) * Math.PI / 4, dx = Math.round(Math.cos(a)), dy = Math.round(Math.sin(a)); // eight directions
+  const now = performance.now();
+  let spread = 0;
+  G.tips = members.map((m, i) => { const def = itemOf(m.uid).def, {w, d} = Engine.dimsOf(def, m.rot), L = Engine.hOf(def, m.rot) + (def.wheels ? 1 : 0);
+    const t = {uid:m.uid, rot:m.rot, x:g.x, y:g.y, w, d, dx, dy, spread, t0:now + i * 90}; // a stack: each case lands just past the one before it, further out
+    spread += (!dx ? d : !dy ? L : Math.max(w, L) * .8) + 1;
+    Object.assign(t, tipPath(t)); return t; });
+  // cases in a stack don't land on each other: each one keeps going (back inward if it bounced) until it's clear of the ones already down
+  const W = G.level.truck.width / IN, D = G.level.truck.depth / IN;
+  G.tips.forEach((t, i) => { const clear = () => G.tips.slice(0, i).every(o => Math.abs(o.ex - t.ex) >= o.hx + t.hx - .05 || Math.abs(o.ey - t.ey) >= o.hy + t.hy - .05);
+    const mx = (t.bounce ? -1 : 1) * t.ux, my = (t.bounce ? -1 : 1) * t.uy;
+    for (let k = 0; k < 80 && !clear(); k++){ t.ex = clamp(t.ex + mx * .5, t.hx, W - t.hx); t.ey = clamp(t.ey + my * .5, t.hy, D - t.hy); }
+    let px = -my, py = mx; if (px * (t.ex - W / 2) + py * (t.ey - D / 2) > 0){ px = -px; py = -py; } // boxed in: slide sideways, toward the side with more room
+    for (let k = 0; k < 80 && !clear(); k++){ t.ex = clamp(t.ex + px * .5, t.hx, W - t.hx); t.ey = clamp(t.ey + py * .5, t.hy, D - t.hy); } });
+  if (h.stack) restore(h.pre); // the dock stack goes back on the dock as it was
+  G.hand = null; G.ghost = null; // a single case goes back to the dock too; no rehandle counted either way
+  sfx('bad'); flashCoach('bad', `${g.reason} <b>${members.length > 1 ? 'The whole stack tipped over' : 'It tipped over'}</b>, so it's back on the dock. Try another spot.`, 4500);
+  refresh();
+  const step = () => { if (!G.tips || !G.tips.length) return;
+    const done = G.tips.filter(t => performance.now() - t.t0 >= TIP_MS); G.tips = G.tips.filter(t => !done.includes(t));
+    for (const t of done){ sfx('out'); poofAt({uid:t.uid, rot:t.rot, x:Math.round(t.ex - t.w / 2), y:Math.round(t.ey - t.d / 2), z:0}); }
+    if (!G.tips.length){ G.tips = null; refresh(); return; } render(); requestAnimationFrame(step); };
+  requestAnimationFrame(step);
+}
+// Where it ends up (grid cells), and whether it bounced: it lands right beside the drop spot; if that would put it through a truck wall
+// (or the nose / the doors), it hits the wall and bounces back inside (Omar 2026-10-10).
+function tipPath(t){
+  const def = itemOf(t.uid).def, L = Engine.hOf(def, t.rot) + (def.wheels ? 1 : 0), n = Math.hypot(t.dx, t.dy) || 1, ux = t.dx / n, uy = t.dy / n;
+  const ofs = (!t.dx ? t.d : !t.dy ? t.w / 2 + L / 2 : (Math.max(t.w, t.d) / 2 + L / 2) * .78) + t.spread;
+  const sx = t.x + t.w / 2, sy = t.y + t.d / 2, ix = sx + ux * ofs, iy = sy + uy * ofs; // ideal landing centre
+  const hx = !t.dx ? t.w / 2 : !t.dy ? L / 2 : (Math.max(t.w, L) / 2) * .9, hy = !t.dx ? t.d / 2 : !t.dy ? t.d / 2 : (Math.max(t.d, L) / 2) * .9; // its half-size lying down
+  const W = G.level.truck.width / IN, D = G.level.truck.depth / IN;
+  const cx = clamp(ix, hx, W - hx), cy = clamp(iy, hy, D - hy), hit = Math.abs(cx - ix) > .05 || Math.abs(cy - iy) > .05; // where it meets the wall
+  const refl = (v, lo, hi) => clamp(v > hi ? hi - (v - hi) : v < lo ? lo + (lo - v) : v, lo, hi); // it rebounds as far as it would have gone past the wall
+  return {sx, sy, ex:refl(ix, hx, W - hx), ey:refl(iy, hy, D - hy), wx:cx, wy:cy, bounce:hit, hx, hy, ux, uy};
+}
+// position along the fall at time k (0..1): out to the wall (or the landing), then back off it if it bounced
+function tipPos(t, k){ const e = q => 1 - Math.pow(1 - q, 3);
+  if (!t.bounce){ const q = e(clamp(k / .2, 0, 1)); return {x:t.sx + (t.ex - t.sx) * q, y:t.sy + (t.ey - t.sy) * q}; }
+  if (k < .16){ const q = e(k / .16); return {x:t.sx + (t.wx - t.sx) * q, y:t.sy + (t.wy - t.sy) * q}; }
+  const q = e(clamp((k - .16) / .14, 0, 1)); return {x:t.wx + (t.ex - t.wx) * q, y:t.wy + (t.ey - t.wy) * q}; }
+// draw the tipped case at (cx, cy) px; cell = px per 6"
+function drawTipCase(ctx, t, cx, cy, cell, alpha){
+  const def = itemOf(t.uid).def, hh = Engine.hOf(def, t.rot), wheel = def.wheels ? 1 : 0, fo = {wheels:!!def.wheels, wheelH:def.wheels ? cell * .7 : 0, style:def.style, label:def.department};
+  ctx.save(); ctx.globalAlpha = alpha; ctx.translate(cx, cy);
+  if (!t.dx) drawCaseBottom(ctx, -t.w * cell / 2, -t.d * cell / 2, t.w * cell, t.d * cell, def); // toward the nose or doors: flipped right over, wheels up
+  else { ctx.rotate(Math.atan2(t.dx, -t.dy)); const L = (hh + wheel) * cell;
+    if (!t.dy) drawCaseFront(ctx, -t.d * cell / 2, -L / 2, t.d * cell, L, fo);        // toward a wall: on its side
+    else drawCaseEnd(ctx, -t.w * cell / 2, -L / 2, t.w * cell, L, fo); }               // toward a corner: on its end panel
+  ctx.restore();
+}
 function placeHand(){
   const h = G.hand, g = G.ghost;
   if (!h || !g || G.mode !== 'play') return false;
+  if (!g.ok && G.level.stacked && (TIP_CODES.has(g.code) || (h.stack && g.code === 'stack'))){ tipOver(h, g); return false; } // a real case (or the whole dock stack) would fall here (Omar 2026-10-10)
   if (!g.ok){ sfx('bad'); flashSome('bad', g.reason, 3000); return false; }
   const before = new Set(Engine.calculateSpaceEfficiency(state()).fullRows);
   G.hist.push(h.pre); G.fut = [];
@@ -5783,7 +5995,7 @@ const SAMPLES = {out:{url:'assets/sounds/case-poof.mp3', vol:.33, skip:.5, buf:n
     parts:[[0, .96], [1.11, .54], [2.63, .69]], last:-1}};   // two of his approvals (his questioning third is the warnings' "huh?") + Pixabay 'Mmm Hmm'
 function leaveTour(){ if (G.loop && !G.loop.closed){ G.loop.closed = true; sfx('baydoor'); } } // once per tour, however you leave
 // every game button clicks (the case list doesn't: picking up a case has its own sound)
-const BUTTON_TAP = false; // held: Omar is still deciding on a button sound (Pixabay 'Screen tap' is loaded and ready)
+const BUTTON_TAP = true; // Pixabay 'Screen tap' on every button, approved by Omar 2026-10-10
 document.addEventListener('click', e => { if (!BUTTON_TAP) return; const b = e.target.closest && e.target.closest('button, .lvl'); if (b && !b.disabled && !b.closest('.manifest-item, #manifestList')) sfx('click'); }, true);
 // start the audio and fetch the recordings on the first click, tap or key, so the first slide's chime is ready
 function warmSound(){ if (!SOUND.on) return; try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; SOUND.ctx = SOUND.ctx || new AC(); loadSamples(SOUND.ctx); loadEngine(SOUND.ctx); loadRoll(SOUND.ctx); } catch(e){} }
@@ -5971,10 +6183,11 @@ function startTransit(){
       const i = Math.floor((t - intro) / per), ph = sim.phases[i], k = clamp(((t - intro) % per - 150) / 600, 0, 1), e = k * k * (3 - 2 * k);
       label = ph.label; amp = 3.5;
       const map = new Map(ph.before.map(p => [p.uid, {...p}]));
-      for (const m of ph.moves){ const p = map.get(m.uid); p.x = m.fx + (m.tx - m.fx) * e; p.y = m.fy + (m.ty - m.fy) * e; if (k > 0) G.anim.shiftedNow.add(m.uid); }
+      for (const m of ph.moves){ const p = map.get(m.uid); p.x = m.fx + (m.tx - m.fx) * e; p.y = m.fy + (m.ty - m.fy) * e; if (k > 0) G.anim.shiftedNow.add(m.uid);
+        if (m.fall){ p.z = m.fz + (m.tz - m.fz) * e * e; if (e > .5){ p.fell = m.fall.f; p.fellSide = m.fall.s; } } } // falling: drops, and tips over halfway
       G.anim.positions = [...map.values()];
     } else if (t < intro + per * sim.phases.length + outro){
-      label = moved ? `${moved} CASE${moved > 1 ? 'S' : ''} MOVED` : 'NO LOAD MOVEMENT'; amp = 0;
+      label = sim.fallen && sim.fallen.size ? `${sim.fallen.size} CASE${sim.fallen.size > 1 ? 'S' : ''} FELL` : moved ? `${moved} CASE${moved > 1 ? 'S' : ''} MOVED` : 'NO LOAD MOVEMENT'; amp = 0;
       G.anim.positions = sim.final;
     } else {
       lbl.style.display = 'none'; G.anim = null;
@@ -6047,10 +6260,11 @@ function showResults(rep){
   const passed = passedRep(rep), lessonMissed = rep.lessonPassed === false && rep.total >= 60;
   const prog = G.progress, ach0 = achSnap(prog);
   prog.best[lv.id] = Math.max(prog.best[lv.id] || 0, passed ? rep.total : Math.min(rep.total, 59)); // best >= 60 always means passed
-  if (passed) prog.unlocked = Math.max(prog.unlocked, lv.id + 1);
+  if (passed && !lv.bonus) prog.unlocked = Math.max(prog.unlocked, lv.id + 1);
+  if (passed && lv.bonus){ prog.bonus = prog.bonus || {}; prog.bonus[lv.id] = Math.max(prog.bonus[lv.id] || 0, stars); }
   if (passed) awardBadges(prog, rep.badges, lv.id);
   saveProgress();
-  $('rsKicker').textContent = `LEVEL ${lv.id} · ${lv.title.toUpperCase()}`;
+  $('rsKicker').textContent = lv.bonus ? `BONUS · ${lv.title.toUpperCase()}` : `LEVEL ${lv.id} · ${lv.title.toUpperCase()}`;
   $('rsTitle').textContent = lv.offload ? (rep.badges.includes('SMART UNLOAD') ? 'SMART UNLOAD' : passed ? 'TRUCK EMPTY' : 'OUT OF ORDER') : lessonMissed ? 'LESSON MISSED' : rep.badges.includes('SHOW READY') ? 'SHOW READY' : passed ? 'TRUCK PACKED' : 'NOT ROAD READY';
   const cats = rep.cats.map(c => `<div class="cat ${c.active ? '' : 'off'}"><span>${c.label}</span><span class="bar"><i style="width:${c.active ? Math.round(c.s * 100) : 0}%"></i></span><span class="pts">${c.active ? `${Math.round(c.pts)}/${c.max}` : 'LATER'}</span></div>`).join('');
   $('rsBody').innerHTML = `
@@ -6062,11 +6276,12 @@ function showResults(rep){
     ${rep.badges.length ? `<div class="badges">${rep.badges.map(b => `<span class="badge">${b}</span>`).join('')}</div>` : ''}
     <div class="section-label">WHAT THE CREW SAYS</div>
     <ul class="feedback">${rep.feedback.map(([k, t]) => `<li class="${k}">${t}</li>`).join('')}</ul>`;
-  const next = G.levelIdx + 1;
+  const next = lv.bonus ? 90 : G.levelIdx + 1; // after the bonus, back on track at level 91
   $('rsNext').disabled = !(next < LEVELS.length && prog.unlocked >= LEVELS[next].id);
   $('rsBetter').hidden = !!(lv.offload || lv.loop || !lv.solution || !lv.solution.length);
   if ($('rsSave')) $('rsSave').onclick = () => openAccount('start');
   stat('level_end', {level:lv.id, score:rep.total, stars, rehandles:rep.rehandles, passed});
+  NIGHT_MUSIC.stop();
   if (!passed && !rep.noStart) setTimeout(() => sfx('fail'), 150); // no level-complete sound: the truck ends the level, the stars are the reward. A won't-start already said it.
   $('rsNext').textContent = next < LEVELS.length ? 'NEXT LEVEL' : 'STACKED LEVELS SOON';
   showAchievements(newAchievements(ach0), () => { G.mode = 'results'; openModal('results'); fillStars(); });
@@ -6584,6 +6799,8 @@ function openLevels(){
   let h = '';
   for (let i = 1; i <= 101; i++){
     const tier = TIERS.find(t => t.from === i);
+    if (i === 91){ const bi = LEVELS.indexOf(BONUS_NIGHT), bopen = prog.unlocked > 90; // after the Expert Final
+      h += `<button class="lvl night" ${bopen ? `data-i="${bi}"` : 'disabled'}><b>☾</b><span class="tag">BONUS</span><small>${BONUS_NIGHT.title}</small><span class="st">${starRow(levelStars(prog, BONUS_NIGHT.id), '☆')}</span></button>`; }
     if (i === 1) h += `<div class="mode-head">CAMPAIGN<small>Levels 1–100 + the final exam</small></div>`;
     if (tier) h += `${i > 1 ? '</div>' : ''}<div class="tier-head">${tier.name}<small>${tier.from === tier.to ? `Level ${tier.from}` : `Levels ${tier.from}–${tier.to}`} · ${tier.note}</small></div><div class="levels-grid">`;
     const lv = LEVELS[i - 1], open = lv && prog.unlocked >= i && (i < 101 || examReady(prog)), st = levelStars(prog, i);
@@ -6762,7 +6979,7 @@ const isMastered = (prog, i) => (prog.stars[i] || 0) >= 3 || ((prog.bonus || {})
 const masteredCount = prog => { let n = 0; for (let i = 1; i <= 100; i++) if (isMastered(prog, i)) n++; return n; };
 const examReady = prog => masteredCount(prog) === 100;
 const nextLevelIdx = () => Math.min(LEVELS.length - 1, Math.max(0, (G.progress.unlocked || 1) - 1));
-function enterHome(){
+function enterHome(){ NIGHT_MUSIC.stop();
   homeBusy = false; leaveTour();
   const nx = nextLevelIdx(), home = LEVELS[nx] && LEVELS[nx].exam ? nx - 1 : nx; // past level 100: put level 100 behind the title, not the exam
   G.quietLoad = true; try { loadLevel(home); } finally { G.quietLoad = false; } // loaded behind the title: don't use up its how-to or ability slide
@@ -6879,6 +7096,14 @@ function kit(ctx, out, t0, wetDest){
 
 
 const MUSIC = {
+  nightShift: {gain:.9, title:'NIGHT SHIFT', bpm:78, bars:4, // slow lo-fi: soft electric-piano chords, lazy drums, record crackle (sound board, Omar's pick for night)
+    play(k, t, beat, bar){ const s = 60 / this.bpm;
+      const ch = [[174.6, 220, 261.6, 329.6], [164.8, 196, 246.9, 293.7], [146.8, 174.6, 220, 261.6], [130.8, 164.8, 196, 246.9]][bar % 4];
+      for (const [i, f] of ch.entries()){ k.tone('sine', f, 0, t - k.t0 + i * .015, s * 3.6, .05, {attack:.01, wet:.5, vib:[4.5, 1.5]}); k.tone('triangle', f * 2, 0, t - k.t0 + i * .015, s * 1.2, .012, {attack:.01, wet:.5}); }
+      const sw = s * .08; drum(k, 'softkick', t); drum(k, 'softkick', t + 2.5 * s + sw, .8); drum(k, 'softsnare', t + s); drum(k, 'softsnare', t + 3 * s);
+      for (let i = 0; i < 8; i++) drum(k, 'hat', t + i * s / 2 + (i % 2 ? sw : 0), .22);
+      k.hiss('highpass', 3000, t - k.t0, s * 4, .012, {attack:.05, hold:s * 3.6});
+      for (let i = 0; i < 6; i++) k.hiss('bandpass', 2000 + Math.random() * 3000, t - k.t0 + Math.random() * s * 4, .01, .04, {q:3}); } },
   tightpack: {gain:.64, title:'TIGHT PACK', desc:'Original: a bouncy minor-key hook on marimba over a pumping bass and snappy drums. Puzzle-game energy, all ours.', bpm:128, bars:8,
     play(k, t, beat, bar){ const s = 60 / this.bpm, i = bar % 8, ch = TIGHT.ch[i];
       MX.melody(k, TIGHT.mel[i], t, s, (n, at, len) => MX.mallet(k, n, at, .09));
@@ -6979,6 +7204,7 @@ function drum(k, type, at, v = 1){ const a = at - k.t0;
 let timer = 0, bus = null, verbN = null, next = 0, bar = 0;
 let track = 'tight';
 function pick(level){ // Tight Pack by default, Peddler's Song (folk) as the second choice (Omar 2026-10-09); both speed up a touch each level
+  if (track === 'night') return MUSIC.nightShift; // the Late Load-Out: a steady tempo
   const m = track === 'folk' ? MUSIC.koroFolk : MUSIC.tightpack;
   return Object.assign(Object.create(m), {bpm:Math.min(m.bpm + 30, m.bpm + (level - 1) * 3)});
 }
@@ -6992,9 +7218,12 @@ function start(levelOf){
   tick(); timer = setInterval(tick, 80);
 }
 function stop(){ clearInterval(timer); timer = 0; if (bus){ const b = bus; bus = null; try { b.gain.setTargetAtTime(0.0001, b.context.currentTime, .08); } catch(e){} setTimeout(() => b.disconnect(), 500); } }
-return {start, stop, playing:() => !!timer, setTrack:t => { track = t === 'folk' ? 'folk' : 'tight'; }};
+return {start, stop, playing:() => !!timer, setTrack:t => { track = t === 'folk' ? 'folk' : t === 'night' ? 'night' : 'tight'; }};
 })();
 
+// The Late Load-Out's music: Night Shift on the Classic player, only while that level is being played
+const NIGHT_MUSIC = { on:false, start(){ if (this.on || !G.level || !G.level.night) return; this.on = true; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('night'); CLASSIC_MUSIC.start(() => 1); },
+  stop(){ if (!this.on) return; this.on = false; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('tight'); } };
 /* =====================================================================
    CLASSIC (Omar 2026-10-08/09): an endless arcade mode on the game's own 24 ft box truck (96" x 288"), with the game's real cases at
    their real footprints on the same 6" grid. Cases roll in at the rear doors and travel toward the nose on their own, faster each level.
@@ -7064,7 +7293,7 @@ function clRotatePlaced(){ // Omar 2026-10-09: rotate cases during the break too
 function clStep(){ // one 6" step toward the nose, or it stops
   const a = CL.active; if (!a) return;
   if (clFree(a.c, a.r - 1, a.w, a.h)){ a.r--; return; }
-  CL.placed.push({...a}); CL.sel = a.id; CL.active = null; CL.down = (CL.down || 0) + 1; CL.breakDone = false; sfx('place'); if (!clSettle()) clNextCase();
+  CL.placed.push({...a}); CL.sel = a.id; CL.active = null; CL.manual = false; /* the player's own scroll lasts until this case lands */ CL.down = (CL.down || 0) + 1; CL.breakDone = false; sfx('place'); if (!clSettle()) clNextCase();
 }
 // no breaks any more (Omar 2026-10-09): the next case comes straight after the last one
 function clNextCase(){ if (CL.over) return; clSpawn(); }
@@ -7110,7 +7339,7 @@ function clToast(big, small){ const t = $('clToast'); t.innerHTML = big + (small
 function clMessage(html){ const m = $('clMsg'); if (html == null){ m.hidden = true; return; } m.innerHTML = html; m.hidden = false; }
 function clHud(){ $('clScore').textContent = CL.score; $('clLines').textContent = CL.lines; $('clLevel').textContent = CL.level; $('clBest').textContent = Math.max(CL.best, CL.score); $('clPause').textContent = CL.paused ? 'RESUME' : 'PAUSE'; $('clMusic').textContent = CL.music === 'folk' ? 'MUSIC: FOLK TUNE' : CL.music ? 'MUSIC: TIGHT PACK' : 'MUSIC: OFF'; }
 function clStart(){
-  Object.assign(CL, {started:true, view:0, queue:[], beltGone:null, beltSeat:true, placed:[], active:null, next:null, score:0, lines:0, level:1, paused:false, over:false, drag:null, flash:null, fast:false, clearing:null, streak:0, down:0, breakLeft:0, breakDone:false, sel:null});
+  Object.assign(CL, {started:true, view:0, manual:false, scrub:null, queue:[], beltGone:null, beltSeat:true, placed:[], active:null, next:null, score:0, lines:0, level:1, paused:false, over:false, drag:null, flash:null, fast:false, clearing:null, streak:0, down:0, breakLeft:0, breakDone:false, sel:null});
   clMessage(null); clSpawn(); clHud(); if (CL.music) CLASSIC_MUSIC.start(() => CL.level);
 }
 function clPause(on){
@@ -7158,7 +7387,7 @@ const clOpenFront = () => { let m = CL.rows; for (let c = 0; c < CL.cols; c++){ 
 function clFrame(now){
   CL.raf = requestAnimationFrame(clFrame); if (!CL.on) return;
   const dt = Math.min(100, now - (clLast || now)); clLast = now; CL.dtLast = dt;
-  if (CL.scroll && CL.L){ const deep = clFront() - CL.L.vis, want = clamp(Math.min(deep + 12, Math.max(clOpenFront() - 4, deep + 4)), 0, Math.max(0, CL.rows - CL.L.vis)); /* slide only when the deepest stack gets within 6 ft of the bottom; stop at the shortest lane, but always keep the deepest stack 2 ft clear of the bottom edge */ CL.view += (want - CL.view) * Math.min(1, dt / 700); } // keep the back 3 ft of the load in view, slide slowly
+  if (CL.scroll && CL.L && !CL.manual){ const deep = clFront() - CL.L.vis, want = clamp(Math.min(deep + 12, Math.max(clOpenFront() - 4, deep + 4)), 0, Math.max(0, CL.rows - CL.L.vis)); /* slide only when the deepest stack gets within 6 ft of the bottom; stop at the shortest lane, but always keep the deepest stack 2 ft clear of the bottom edge */ CL.view += (want - CL.view) * Math.min(1, dt / 700); } // keep the back 3 ft of the load in view, slide slowly
   if (CL.clearing && !CL.paused && now >= CL.clearing.until) clFinishClear();
   if (CL.breakLeft > 0 && !CL.paused && !CL.over){ CL.breakLeft -= dt; if (CL.breakLeft <= 0){ CL.breakLeft = 0; clSpawn(); } }
   if (CL.active && !CL.paused && !CL.over && !CL.clearing){ CL.t += dt * (CL.fast ? 5 : 1); while (CL.active && CL.t >= clSpeed()){ CL.t -= clSpeed(); clStep(); clBeltTick(); } }
@@ -7245,12 +7474,12 @@ function clDraw(){
   ctx.fillText(atNose ? '▲ NOSE ▲' : '▲ TOWARD THE NOSE ▲', ox + W / 2, y0 - wall - (CL.scroll ? 13 : 14));
   ctx.fillText(atDoors ? '▼ REAR DOORS / RAMP ▼' : '▼ TOWARD THE DOORS ▼', ox + W / 2, y0 + CL.L.visH + (CL.scroll ? 12 : 18));
   if (CL.scroll) clBelt(ctx, CL.dtLast || 16);
-  if (CL.scroll && CL.L.vis < CL.rows){ const sx = ox + W + wall + 5, sh = CL.L.visH; ctx.fillStyle = '#3a3b38'; ctx.fillRect(sx, y0, 5, sh); ctx.fillStyle = '#e8892f'; ctx.fillRect(sx, y0 + CL.view / CL.rows * sh, 5, CL.L.vis / CL.rows * sh); }
+  if (CL.scroll && CL.L.vis < CL.rows){ const sx = ox + W + wall + 4, sh = CL.L.visH, ty = y0 + CL.view / CL.rows * sh, th = CL.L.vis / CL.rows * sh; ctx.fillStyle = '#3a3b38'; ctx.fillRect(sx, y0, 8, sh); ctx.fillStyle = CL.manual ? '#f0c04a' : '#e8892f'; ctx.fillRect(sx, ty, 8, th); ctx.fillStyle = 'rgba(0,0,0,.45)'; for (const k of [-4, 0, 4]) ctx.fillRect(sx + 1.5, ty + th / 2 + k, 5, 1.5); } // drag it (or the belt) to look around; yellow while you're in control
 }
 function clDrawNext(){
   const cv = $('clNext'); if (!cv || !CL.next) return; const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 120, h = cv.clientHeight || 90;
   cv.width = w * dpr; cv.height = h * dpr; const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.fillStyle = '#1f201d'; ctx.fillRect(0, 0, w, h);
-  const n = CL.next, s = Math.min((w - 16) / n.w, (h - 16) / n.h); const nd = clDef(n.key); if (nd.truss) clTruss(ctx, (w - n.w * s) / 2, (h - n.h * s) / 2, n.w * s, n.h * s); else drawCaseTop(ctx, (w - n.w * s) / 2, (h - n.h * s) / 2, n.w * s, n.h * s, nd, {noText:true});
+  const n = CL.L && CL.L.belt && CL.queue && CL.queue.length ? CL.queue[CL.queue.length - 1] : CL.next, s = Math.min((w - 16) / n.w, (h - 16) / n.h); const nd = clDef(n.key); if (nd.truss) clTruss(ctx, (w - n.w * s) / 2, (h - n.h * s) / 2, n.w * s, n.h * s); else drawCaseTop(ctx, (w - n.w * s) / 2, (h - n.h * s) / 2, n.w * s, n.h * s, nd, {noText:true});
 }
 /* ---- input ---- */
 document.addEventListener('keydown', e => {
@@ -7261,6 +7490,8 @@ document.addEventListener('keydown', e => {
 document.addEventListener('keyup', e => { if (CL.on && e.key === 'ArrowUp') CL.fast = false; }, true);
 function clCell(e){ const r = $('clCanvas').getBoundingClientRect(), {cell, ox} = CL.L, oy = CL.L.oy - (CL.scroll ? CL.view : 0) * cell; return {x:e.clientX - r.left, y:e.clientY - r.top, c:Math.floor((e.clientX - r.left - ox) / cell), r:Math.floor((e.clientY - r.top - oy) / cell)}; }
 $('clCanvas').addEventListener('pointerdown', e => {
+  if (CL.scroll && CL.L && CL.L.vis < CL.rows && !CL.over){ const q0 = clCell(e); if (q0.x >= CL.L.ox + CL.L.W + CL.L.wall){ e.preventDefault(); // Omar 2026-10-10: scroll it yourself; auto comes back when the case lands
+      CL.scrub = {id:e.pointerId, y0:q0.y, v0:CL.view}; CL.manual = true; try { $('clCanvas').setPointerCapture(e.pointerId); } catch(x){} return; } }
   if ((!CL.active && !(CL.breakLeft > 0)) || CL.paused || CL.over) return; e.preventDefault(); const q = clCell(e), a = CL.active;
   const hit = CL.placed.find(p => q.c >= p.c && q.c < p.c + p.w && q.r >= p.r && q.r < p.r + p.h);
   try { $('clCanvas').setPointerCapture(e.pointerId); } catch(x){} // keeps the drag even if the finger leaves the canvas
@@ -7269,16 +7500,18 @@ $('clCanvas').addEventListener('pointerdown', e => {
 });
 $('clCanvas').addEventListener('pointermove', e => {
   const q = clCell(e), d = CL.drag;
+  if (CL.scrub && CL.scrub.id === e.pointerId){ CL.view = clamp(CL.scrub.v0 + (q.y - CL.scrub.y0) / CL.L.visH * CL.rows, 0, CL.rows - CL.L.vis); clDraw(); return; }
   if (d && d.id === e.pointerId){ d.c = clSnap(clamp(q.c - d.dc, 0, CL.cols - d.p.w), d.p.w); d.r = clamp(q.r - d.dr, 0, CL.rows - d.p.h); clDraw(); return; }
   const s = CL.swipe, a = CL.active; if (!s || s.id !== e.pointerId || !a) return;
   const want = clSnap(clamp(s.c0 + Math.round((q.x - s.x0) / CL.L.cell), 0, CL.cols - a.w), a.w); const st = a.w % CL_LANE ? 1 : CL_LANE; while (a.c < want && clFree(a.c + st, a.r, a.w, a.h)) a.c += st; while (a.c > want && clFree(a.c - st, a.r, a.w, a.h)) a.c -= st;
 });
 const clUp = e => {
+  if (CL.scrub && CL.scrub.id === e.pointerId){ CL.scrub = null; return; }
   const d = CL.drag;
   if (d && d.id === e.pointerId){ CL.drag = null; if (clFree(d.c, d.r, d.p.w, d.p.h, d.p)){ d.p.c = d.c; d.p.r = d.r; clRollForward(d.p); sfx('place'); if (!CL.clearing) clSettle(); } else sfx('bad'); clDraw(); return; }
   if (CL.swipe && CL.swipe.id === e.pointerId) CL.swipe = null;
 };
-$('clCanvas').addEventListener('pointerup', clUp); $('clCanvas').addEventListener('pointercancel', () => { CL.drag = null; CL.swipe = null; });
+$('clCanvas').addEventListener('pointerup', clUp); $('clCanvas').addEventListener('pointercancel', () => { CL.drag = null; CL.swipe = null; CL.scrub = null; });
 // phone pad: hold ◀ ▶ to keep moving, hold FASTER to roll it in quicker
 const clHold = (id, down, up) => { const b = $(id); let t = 0; const stop = () => { clearInterval(t); t = 0; if (up) up(); };
   b.addEventListener('pointerdown', e => { e.preventDefault(); down(); if (!up) t = setInterval(down, 110); }); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, stop); };
