@@ -4531,7 +4531,7 @@ function renderAbilityList(){
 }
 $('abList').addEventListener('click', e => { const b = e.target.closest('[data-ab]'); if (b){ closeModals(); showAbility(b.dataset.ab); } });
 $('abGo').onclick = closeAbility;
-function startPlay(){ closeModals(); clockStop(); if (G.level && G.level.clock) clockStart(); if (G.level && G.level.night) NIGHT_MUSIC.start(); else NIGHT_MUSIC.stop(); if (G.level && !G.level.loop) sfx('beeper'); /* the truck backs in */ if (G.level && G.level.id && !G.level.demo) stat('level_start', {level:G.level.id}); G.mode = 'play'; G.coachShowUntil = performance.now() + COACH_LESSON_MS; G.coachFirst = true; G.warnSeen = {}; refresh(); }
+function startPlay(){ closeModals(); clockStop(); if (G.level && G.level.clock) clockStart(); if (G.level && G.level.night) NIGHT_MUSIC.start(); else NIGHT_MUSIC.stop(); if (G.level && !G.level.loop) sfx('beeper'); /* the truck backs in */ if (G.level && G.level.night) flickerStart(); if (G.level && G.level.id && !G.level.demo) stat('level_start', {level:G.level.id}); G.mode = 'play'; G.coachShowUntil = performance.now() + COACH_LESSON_MS; G.coachFirst = true; G.warnSeen = {}; refresh(); }
 
 /* ---------- layout + rendering ---------- */
 const PHONE_RESERVE = 124; // phone: the button row + READY under the truck
@@ -4685,7 +4685,8 @@ function render(){
     const pp = tipPos(t, k), fade = clamp((TIP_MS - (performance.now() - t.t0)) / 300, 0, 1);
     drawTipCase(ctx, t, ox + pp.x * cell, oy + pp.y * cell, cell, fade);
     if (k > .3) fellTag(ctx, ox + (t.ex - t.w / 2) * cell, oy + (t.ey - t.d / 2) * cell); }
-  if (nightOn()){ // the light: on the case in hand, the bar/strap being placed, or the last case set down
+  const fl = nightOn() ? flickerLevel() : null; if (fl != null) flickerShade(ctx, fl);
+  if (nightOn() && fl == null){ // the light: on the case in hand, the bar/strap being placed, or the last case set down
     let cx = ox + Wp / 2, cy = oy + cell * 4, r = Wp * .4;
     if (G.hand && G.ghost){ const {w, d} = Engine.dimsOf(itemOf(G.hand.uid).def, G.hand.rot); cx = ox + (G.ghost.x + w / 2) * cell; cy = oy + (G.ghost.y + d / 2) * cell; r = Math.min(Wp * .46, Math.max(w, d) * cell * .75 + cell * 4); }
     else if (G.tool && G.tool.L != null){ cy = oy + G.tool.L * cell; r = Wp * .42; }
@@ -4858,6 +4859,23 @@ function fellTag(ctx, x, y){ ctx.save(); ctx.font = "800 11px 'Barlow Condensed'
   ctx.fillStyle = '#111'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FELL', x + 3 + tw / 2, y + 10); ctx.restore(); }
 // LATE LOAD-OUT: darkness with one soft circle of light (Omar 2026-10-10). r: bigger than the case, smaller than the truck.
 const nightOn = () => !!(G.level && G.level.night && G.mode === 'play');
+// Dark rounds (Omar 2026-10-13): the round opens with the lights at 100%. The truck backs in, one more beat, then the starter hums
+// and the light fades to half; when the hum ends it's back to 100%, flickers once, and the second flicker surges to 150% with the bulb pop: dark from there on
+const FLICKER_AT = 2600, FLICKER_DARK = 2350; // hum starts 2.6 s after the round opens (three beeps + a beat); the rest is ms after the hum starts
+function flickerLevel(){ const f = G.flicker; if (!f || G.level !== f.lv) return null; const t = performance.now() - f.t0; // 1 = normal light, 0 = off
+  if (t < 0) return 1; if (t < 600) return 1 - .5 * t / 600; if (t < 1800) return .5; // the hum: fade to half and hold
+  if (t < 1950) return 1; if (t < 2070) return 0; if (t < 2200) return 1;              // hum over: 100%, then one flicker
+  if (t < FLICKER_DARK) return 1.5; return null; }                                        // the second flicker: a 150% surge, the pop, then dark
+function flickerStart(){ const f = G.flicker = {t0:performance.now() + FLICKER_AT, lv:G.level}; let hum = false, pop = false;
+  const step = () => { if (G.flicker !== f || G.level !== f.lv) return; const t = performance.now() - f.t0;
+    if (t >= 0 && !hum){ hum = true; sfx('lightstart'); }
+    if (t >= 2200 && !pop){ pop = true; sfx('bulbbreak'); }
+    if (t >= FLICKER_DARK){ G.flicker = null; render(); return; } render(); requestAnimationFrame(step); };
+  requestAnimationFrame(step); }
+function flickerShade(ctx, lv){ ctx.save(); // lights at lv (0..1.5) over the whole view
+  if (lv < 1){ ctx.fillStyle = `rgba(6,8,14,${1 - lv})`; ctx.fillRect(-4000, -4000, 9000, 9000); }
+  else if (lv > 1){ ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `rgba(255,244,214,${(lv - 1) * .7})`; ctx.fillRect(-4000, -4000, 9000, 9000); }
+  ctx.restore(); }
 function nightDark(ctx, cx, cy, r, outlines){
   const A = 1; ctx.save(); // fully dark outside the light (Omar 2026-10-10, asked twice for darker)
   if (!(r > 0)){ ctx.fillStyle = `rgba(6,8,14,${A})`; ctx.fillRect(-4000, -4000, 9000, 9000); ctx.restore(); return; } // hands empty: lights out
@@ -4963,7 +4981,8 @@ function renderDoor(ctx){
     else { const L = (hh + wheel) * cell, B = t.w * cell; ctx.translate(clamp(ox + pp.x * cell, ox + L / 2, ox + Wp - L / 2), floorY - B / 2); ctx.rotate(t.dx > 0 ? Math.PI / 2 : -Math.PI / 2); // wheels point back toward where it was dropped
       drawCaseFront(ctx, -B / 2, -L / 2, B, L, {wheels:!!def.wheels, wheelH:def.wheels ? cell * .7 : 0, style:def.style, label:def.department}); }
     ctx.restore(); }
-  if (nightOn()){ // door view is just as dark: the light rides the case in hand, else the last case set down
+  const fl = nightOn() ? flickerLevel() : null; if (fl != null) flickerShade(ctx, fl);
+  if (nightOn() && fl == null){ // door view is just as dark: the light rides the case in hand, else the last case set down
     let cx = ox + Wp / 2, cy = floorY - Hp * .3, r = Wp * .4;
     const lit = (x, z, w, h) => { cx = ox + (x + w / 2) * cell; cy = floorY - (z + h / 2) * cell; r = Math.min(Wp * .46, Math.max(w, h) * cell * .75 + cell * 4); };
     if (G.hand && G.ghost){ const def = itemOf(G.hand.uid).def, {w} = Engine.dimsOf(def, G.hand.rot); lit(G.ghost.x, G.ghost.z || 0, w, Engine.hOf(def, G.hand.rot)); }
@@ -6009,7 +6028,9 @@ const SAMPLES = {out:{url:'assets/sounds/case-poof.mp3', vol:.33, skip:.5, buf:n
   shine2:{url:'assets/sounds/star-11.m4a', vol:.7, buf:null, loading:null},   // 'Shine 11': the second
   shine3:{url:'assets/sounds/star-7.m4a', vol:.45, buf:null, loading:null},  // 'Shine 7': the third (a perfect 100)
   baydoor:{url:'assets/sounds/bay-door.m4a', vol:.25, buf:null, loading:null}, // the bay door rolling shut when you leave the Endless Tour
-  crewup:{url:'assets/sounds/crew-swipe.mp3', vol:.6, buf:null, loading:null},   // the crew member pops up: a soft swipe, the quietest sound in the game
+  crewup:{url:'assets/sounds/crew-swipe.mp3', vol:.6, buf:null, loading:null},
+  lightstart:{url:'assets/sounds/light-starter.m4a', vol:.15, buf:null, loading:null}, // freesound_community 'Faulty Fluorescent Light Starter & Hum', trimmed to the buzz: dark rounds open
+  bulbbreak:{url:'assets/sounds/bulb-break.m4a', vol:.14, buf:null, loading:null},  // freesound_community 'Fluorescent Lightbulb Break': the lights go out   // the crew member pops up: a soft swipe, the quietest sound in the game
   bar:{url:'assets/sounds/load-bar.m4a', vol:.33, buf:null, loading:null},        // load bar locks in: the briefcase latch click (Pixabay, rsellick), Omar's pick 2026-10-08
   baroff:{from:'bar', reverse:true, vol:.33, buf:null, loading:null},               // and comes out: the same click reversed
   crewdown:{from:'crewup', reverse:true, vol:.6, buf:null, loading:null},       // and goes away: the same swipe reversed
@@ -7262,7 +7283,7 @@ const clockLeft = () => Math.max(0, (CLOCK.end - performance.now()) / 1000);
 function clockLabel(ctx, x, y){ if (!G.level || !G.level.clock || !CLOCK.t) return; const t = Math.ceil(clockLeft()), m = Math.floor(t / 60), sec = String(t % 60).padStart(2, '0');
   ctx.save(); ctx.font = "800 22px 'Barlow Condensed', sans-serif"; ctx.textAlign = 'right'; ctx.textBaseline = 'middle'; ctx.fillStyle = t <= 30 ? '#e8604a' : '#f0c04a'; ctx.fillText(`⏱ ${m}:${sec}`, x, y); ctx.restore(); } // short, so it never runs into the NOSE label
 // The Late Load-Out's music: Night Shift on the Classic player, only while that level is being played
-const NIGHT_MUSIC = { on:false, start(){ if (this.on || !G.level || !G.level.night) return; this.on = true; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('night'); CLASSIC_MUSIC.start(() => 1); },
+const NIGHT_MUSIC = { on:false, start(){ if (this.on || !G.level || !G.level.night || clStore.get('classicMusic', 'tight') === 'off') return; /* Classic's MUSIC: OFF also silences the bonus rounds; sound effects stay on (Omar 2026-10-13) */ this.on = true; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('night'); CLASSIC_MUSIC.start(() => 1); },
   stop(){ if (!this.on) return; this.on = false; CLASSIC_MUSIC.stop(); CLASSIC_MUSIC.setTrack('tight'); } };
 /* =====================================================================
    CLASSIC (Omar 2026-10-08/09): an endless arcade mode on the game's own 24 ft box truck (96" x 288"), with the game's real cases at
