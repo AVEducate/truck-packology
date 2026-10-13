@@ -4298,12 +4298,12 @@ function closeModals(){ for (const m of document.querySelectorAll('.modal-back')
 /* ---------- level lifecycle ---------- */
 function loadLevel(idx){  const lv = LEVELS[idx]; if (lv && lv.exam){ if (examReady(G.progress)) openExam(); else openLevels(); return; } loadLevelObj(lv, idx); }
 function loadLevelObj(lv, idx){ NIGHT_MUSIC.stop(); clockStop();
-  G.crewOff = false; G.warnSeen = {}; G.coachPeek = 0; G.rehandles = 0; G.lastPlaced = null; // the crew comes back on every new level
+  G.crewOff = false; G.warnSeen = {}; G.coachPeek = 0; G.rehandles = 0; G.lastPlaced = null; G.sel = null; // the crew comes back on every new level
   G.levelIdx = idx; G.level = lv;
   G.items = new Map(); let n = 0;
   for (const c of G.level.cases) for (let i = 0; i < c.count; i++){ const uid = 'c' + (++n); G.items.set(uid, {uid, type:c.type, def:CASES[c.type]}); }
   G.placements = []; G.bars = []; G.staging = []; G.view = 'top'; G.tool = null; G.hist = []; G.fut = []; G.hand = null;
-  if (G.level.stacked && G.level._par == null) G.level._par = levelPar(G.level); G.ghost = null; G.hover = null; G.lastInfo = null; G.lastPlaced = null; G.slide = {}; $('dockZone').hidden = true;
+  if (G.level.stacked && G.level._par == null) G.level._par = levelPar(G.level); G.ghost = null; G.hover = null; G.lastInfo = null; G.lastPlaced = null; G.sel = null; G.slide = {}; $('dockZone').hidden = true;
   G.coachStep = 0; G.transitView = null; G.anim = null; G.flash = null; G.floorCache = null;
   setScreen('game'); layout();
   $('hudLevel').textContent = G.level.demo ? 'DEMO' : G.level.bonus ? 'BONUS' : G.level.id;
@@ -4671,7 +4671,7 @@ function render(){
       ctx.save(); ctx.translate(fx + w * cell / 2, fy + d * cell / 2); ctx.rotate(p.fell === 'front' ? 0 : p.fell === 'back' ? Math.PI : p.fellSide > 0 ? Math.PI / 2 : -Math.PI / 2);
       drawCaseFront(ctx, -B / 2, -L / 2, B, L, {wheels:!!it.def.wheels, wheelH:it.def.wheels ? cell * .7 : 0, style:it.def.style, label:it.def.department}); ctx.restore(); }
     else drawCaseTop(ctx, ox + p.x * cell, oy + (p.y + (G.slide && G.slide[p.uid] ? G.slide[p.uid].f : 0)) * cell, w * cell, d * cell, it.def, {
-      hover:G.hover === p.uid && !G.hand, shifted:shifted && shifted.has(p.uid), elev:(p.z || 0) * IN,
+      hover:(G.hover === p.uid || G.sel === p.uid) && !G.hand, shifted:shifted && shifted.has(p.uid), elev:(p.z || 0) * IN,
       priority:G.level.unloadSequence ? Engine.priorityOf(G.level, it.def) : null
     });
     if (p.rot & 2) sideTag(ctx, ox + p.x * cell, oy + (p.y + d) * cell);
@@ -4971,7 +4971,7 @@ function renderDoor(ctx){
   // painter's order, back to front: a device at a tier line sits behind every case loaded past it
   const draws = pos.map(o => ({k:o.p.y + o.r.d, z:o.r.z, f:() => {
     const far = (loadEnd - (o.p.y + o.r.d)) / loadEnd;
-    drawFront(o.r, o.p.x, o.r.z, {fade:far * .9, outline:shifted && shifted.has(o.p.uid) ? '#e8604a' : (G.hover === o.p.uid && !G.hand ? '#ebe3cb' : null)});
+    drawFront(o.r, o.p.x, o.r.z, {fade:far * .9, outline:shifted && shifted.has(o.p.uid) ? '#e8604a' : ((G.hover === o.p.uid || G.sel === o.p.uid) && !G.hand ? '#ebe3cb' : null)});
   }}));
   for (const b of G.bars) draws.push({k:b.y + .5, z:0, f:() => drawDoorDevice(b)});
   draws.sort((a, b) => a.k - b.k || a.z - b.z).forEach(d => d.f());
@@ -5085,7 +5085,7 @@ function placeStageControls(){
   if (!G.L || !G.level) return;
   if (isPhone()){ // the phone layout positions the button row and READY with CSS
     for (const el of [$('stageTools'), $('btnTransit')]) el.removeAttribute('style');
-    $('btnRotatePh').classList.toggle('dimmed', G.mode !== 'play' || turnLocked() || !(G.hand || G.placements.some(p => p.uid === G.lastPlaced)));
+    $('btnRotatePh').classList.toggle('dimmed', G.mode !== 'play' || turnLocked() || !(G.hand || G.placements.some(p => p.uid === G.lastPlaced || p.uid === G.sel)));
     return;
   }
   const L = G.L, door = doorView(), tools = $('stageTools'), btn = $('btnTransit');
@@ -5446,12 +5446,26 @@ function pickFromDock(type){
   if (G.keyMode) spawnGhostAtDoor();
   refresh();
 }
+// Locked in (Omar 2026-10-13): while packing, a case that can't come out (same rule as unloading: cases between it and the doors,
+// a case on top, a load bar or strap in the way) is locked, unless it still has room to slide or turn inside its own pocket.
+// A boxed-in floor case keeps moving inside its pocket (the engine's 'from' rule); it just can't leave it. Classic doesn't use this.
+function caseLocked(uid){
+  if (!G.level || G.level.offload) return null; const p = G.placements.find(q => q.uid === uid); if (!p) return null;
+  const why = offBlock(uid); if (!why || (p.z || 0) > 0 || /riding on top/.test(why)) return why;
+  const st = state(), others = G.placements.filter(q => q.uid !== uid), def = itemOf(uid).def, from = {x:p.x, y:p.y, rot:p.rot};
+  const {w, d} = Engine.dimsOf(def, p.rot), cx = p.x + w / 2, cy = p.y + d / 2;
+  const tries = [[p.x + 1, p.y, p.rot], [p.x - 1, p.y, p.rot], [p.x, p.y + 1, p.rot], [p.x, p.y - 1, p.rot]];
+  if (def.floorRotate !== false && !turnLocked()){ const r = p.rot ^ 1, n = Engine.dimsOf(def, r); // turning in place, nudged a little if it has to
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) tries.push([Math.round(cx - n.w / 2) + dx, Math.round(cy - n.d / 2) + dy, r]); }
+  return tries.some(([x, y, r]) => Engine.canRotateCase(def, r).ok && Engine.canPlaceCase(st, uid, x, y, r, others, from).ok) ? null : why;
+}
 function pickFromTruck(uid){
   if (G.mode !== 'play') return;
   if (G.level.stacked){
     const rs = Engine.rects(state()), on = Engine.restingOn(rs, rs.find(r => r.uid === uid));
     if (on.length){ flashCoach('bad', `Take the ${on[0].def.name} off the top first. Cases always come off top to bottom.`); return; }
   }
+  const locked = caseLocked(uid); if (locked){ flashCoach('bad', `<b>Locked in.</b> ${locked} Or use UNDO.`, 3500); return; }
   const pre = snap(), p = G.placements.find(q => q.uid === uid);
   G.placements = G.placements.filter(q => q.uid !== uid);
   G.coachOverride = null;
@@ -5721,7 +5735,7 @@ function placeHand(){
   G.hist.push(h.pre); G.fut = [];
   // moving a case that was loaded earlier is a rehandle; nudging or turning the one you just set down is not
   if (h.from === 'truck' && h.orig && h.uid !== G.lastPlaced && (g.x !== h.orig.x || g.y !== h.orig.y || (g.z || 0) !== (h.orig.z || 0))) G.rehandles = (G.rehandles || 0) + 1;
-  G.lastPlaced = h.stack ? null : h.uid;
+  G.lastPlaced = h.stack ? null : h.uid; if (G.sel !== h.uid) G.sel = null; // phone: setting down another case drops the tap selection
   if (h.stack) G.placements.push(...Engine.stackPlacements(state(), h.stack, g.x, g.y));
   else G.placements.push({uid:h.uid, x:g.x, y:g.y, z:g.z || 0, rot:h.rot});
   if (G.level.slip && !h.stack && !(g.z > 0)){ const p = G.placements[G.placements.length - 1]; let y = p.y; // wet floor (Rain Delay)
@@ -5779,7 +5793,7 @@ function moveGhost(dx, dy){
 // no undo or redo (Omar 2026-10-08): it erased rehandles, so it worked as a cheat. Taking a case out is the way back, and it counts.
 function resetLevel(){ if (G.mode !== 'play') return; G.tool = null; if (G.hand) cancelHand(true);
   if (G.level.loop && G.level.offload){ flashCoach('bad', 'This truck is at the venue: unload it. RESET is for packing.'); return; }
-  if (G.level.offload){ G.hist.push(snap()); G.fut = []; loadPack(); refresh(); flashCoach('tip', 'Truck reloaded.'); return; } if (!G.placements.length && !G.bars.length) return; G.hist.push(snap()); G.fut = []; G.rehandles = 0; G.lastPlaced = null; G.placements = []; /* starting over is a fresh plan */ G.bars = []; G.coachStep = 0; refresh(); flashCoach('tip', 'Truck emptied. <b>UNDO</b> brings the load back.'); }
+  if (G.level.offload){ G.hist.push(snap()); G.fut = []; loadPack(); refresh(); flashCoach('tip', 'Truck reloaded.'); return; } if (!G.placements.length && !G.bars.length) return; G.hist.push(snap()); G.fut = []; G.rehandles = 0; G.lastPlaced = null; G.sel = null; G.placements = []; /* starting over is a fresh plan */ G.bars = []; G.coachStep = 0; refresh(); flashCoach('tip', 'Truck emptied. <b>UNDO</b> brings the load back.'); }
 
 /* ---------- load bars + straps ---------- */
 function startTool(kind){
@@ -6669,7 +6683,7 @@ function loopSetTruck(depth, name){
   const L = G.loop;
   G.levelIdx = -2; G.level = loopLevel(depth, name, L.truckNo);
   G.placements = []; G.bars = []; G.staging = []; G.view = 'top'; G.tool = null; G.hist = []; G.fut = []; G.hand = null;
-  G.ghost = null; G.hover = null; G.lastInfo = null; G.lastPlaced = null; G.slide = {}; $('dockZone').hidden = true; G.coachStep = 0; G.transitView = null; G.anim = null; G.flash = null; G.floorCache = null;
+  G.ghost = null; G.hover = null; G.lastInfo = null; G.lastPlaced = null; G.sel = null; G.slide = {}; $('dockZone').hidden = true; G.coachStep = 0; G.transitView = null; G.anim = null; G.flash = null; G.floorCache = null;
   L.event = L.truckNo >= 6 && Math.random() < .35 ? {at:4 + Math.floor(Math.random() * 6)} : null; // a production change, once enough is on the truck
   L.sent = null; L.loadIn = false;
   $('hudLevel').textContent = 'TOUR';
@@ -7385,8 +7399,10 @@ function clFinishClear(){
   const band = CL.clearing.cases; CL.clearing = null;
   const A = Math.min(...band.map(p => p.r)), B = Math.max(...band.map(p => p.r + p.h));
   CL.placed = CL.placed.filter(p => !band.includes(p)); for (const p of CL.placed) if (p.r >= B) p.r -= B - A; // the load behind moves up as one block, its gaps intact
-  CL.lines++; CL.streak = (CL.streak || 0) + 1;
-  CL.score += 100; // every row is 100 points: two rows 200, three rows 300 (Omar 2026-10-10)
+  // a band can hold more than one row: a deep case beside two shorter ones back to back clears two rows at once (Omar 2026-10-13)
+  let rows = 1; for (let c = 0; c < CL.cols; c++) rows = Math.max(rows, band.filter(p => p.c <= c && c < p.c + p.w).length);
+  CL.lines += rows; CL.streak = (CL.streak || 0) + 1;
+  CL.score += 100 * rows; // every row is 100 points: two rows 200, three rows 300 (Omar 2026-10-10)
   const lvl = 1 + Math.floor(CL.lines / 6); if (lvl > CL.level){ CL.level = lvl; clToast('LEVEL ' + lvl, 'Cases roll in faster'); }
   if (!clSettle()){ CL.streak = 0; if (!CL.active) clNextCase(); }
   clHud();
@@ -7621,8 +7637,8 @@ function phoneRotate(mx, my){
 function phoneRotateBtn(){
   if (G.mode !== 'play') return;
   if (G.hand || turnLocked()){ rotateHand(); if (turnLocked() && !G.hand) flashCoach('tip', `You'll unlock turning a case at level ${TURN_LEVEL}. These cases already fit the way they come.`, 3000); return; }
-  const uid = G.placements.some(p => p.uid === G.lastPlaced) ? G.lastPlaced : null;
-  if (!uid){ flashCoach('tip', 'Hold a case or set one down, then tap <b>ROTATE</b> to turn it.', 2500); return; }
+  const uid = G.placements.some(p => p.uid === G.sel) ? G.sel : G.placements.some(p => p.uid === G.lastPlaced) ? G.lastPlaced : null; // the case you tapped, else the last one set down
+  if (!uid){ flashCoach('tip', 'Tap a case or hold one, then tap <b>ROTATE</b> to turn it.', 2500); return; }
   pickFromTruck(uid); if (!G.hand) return;
   rotateHand();
   if (G.ghost && G.ghost.ok) placeHand();
@@ -7690,7 +7706,8 @@ function phoneMove(e){
     else if (g.kind === 'canvas'){
       if (g.armed){ g.kind = 'flick'; g.fy = e.clientY; }
       else if (G.hand) g.kind = 'drag';
-      else if (g.uid){ pickFromTruck(g.uid); g.kind = G.hand ? 'drag' : 'none'; }
+      else if (g.uid && !caseLocked(g.uid)){ pickFromTruck(g.uid); g.kind = G.hand ? 'drag' : 'none'; }
+      else if (g.uid){ g.kind = 'pan'; g.sy0 = G.scrollY || 0; g.vy = 0; } // locked in: the drag scrolls the truck
       else { g.kind = 'pan'; g.sy0 = G.scrollY || 0; g.vy = 0; }
     }
   }
@@ -7748,8 +7765,8 @@ function phoneUp(e){
     if (key && PH.lastTap && PH.lastTap.key === key && now - PH.lastTap.t < 340){ // double-tap = remove
       PH.lastTap = null;
       if (g.bar) removeBar(g.bar);
-      else { const name = itemOf(g.uid).def.name; pickFromTruck(g.uid); if (G.hand && returnToDock()) flashCoach('tip', `The ${name} is back on the dock.`, 2500); }
-    } else PH.lastTap = key ? {key, t:now} : null;
+      else { const name = itemOf(g.uid).def.name; G.sel = null; pickFromTruck(g.uid); if (G.hand && returnToDock()) flashCoach('tip', `The ${name} is back on the dock.`, 2500); }
+    } else { PH.lastTap = key ? {key, t:now} : null; G.sel = g.uid || null; refresh(); } // one tap selects a case that's down (outlined); ROTATE turns it (Omar 2026-10-13)
   } else if (g.kind === 'strip'){ // let the strip coast a little after a flick
     let v = clamp(g.vx * 16, -30, 30); const el = g.strip;
     const coast = () => { if (Math.abs(v) < .5) return; el.scrollLeft -= v; v *= .88; requestAnimationFrame(coast); };
