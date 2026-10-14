@@ -5446,7 +5446,7 @@ function pickFromDock(type){
   if (G.keyMode) spawnGhostAtDoor();
   refresh();
 }
-// Locked in (Omar 2026-10-13): while packing, a case that can't come out (same rule as unloading: cases between it and the doors,
+// Can't get it out (Omar 2026-10-13; renamed from "Locked in", which is the every-tier-tied-in badge): while packing, a case that can't come out (same rule as unloading: cases between it and the doors,
 // a case on top, a load bar or strap in the way) is locked, unless it still has room to slide or turn inside its own pocket.
 // A boxed-in floor case keeps moving inside its pocket (the engine's 'from' rule); it just can't leave it. Classic doesn't use this.
 function caseLocked(uid){
@@ -5465,7 +5465,7 @@ function pickFromTruck(uid){
     const rs = Engine.rects(state()), on = Engine.restingOn(rs, rs.find(r => r.uid === uid));
     if (on.length){ flashCoach('bad', `Take the ${on[0].def.name} off the top first. Cases always come off top to bottom.`); return; }
   }
-  const locked = caseLocked(uid); if (locked){ flashCoach('bad', `<b>Locked in.</b> ${locked} Or use UNDO.`, 3500); return; }
+  const locked = caseLocked(uid); if (locked){ flashCoach('bad', `<b>Can't get it out.</b> ${locked} Or use UNDO.`, 3500); return; }
   const pre = snap(), p = G.placements.find(q => q.uid === uid);
   G.placements = G.placements.filter(q => q.uid !== uid);
   G.coachOverride = null;
